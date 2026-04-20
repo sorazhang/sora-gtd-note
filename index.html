@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GTD Note System</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo">
+          <span class="logo-icon">◈</span>
+          <span class="logo-text">GTD Notes</span>
+        </div>
+        <span class="current-week-badge">Week <span id="currentWeekNum"></span> · <span id="currentYear"></span></span>
+      </div>
+      <div class="header-center">
+        <span class="current-date" id="currentDate"></span>
+      </div>
+      <div class="header-right">
+        <button class="btn-secondary" id="exportAllBtn">Export All</button>
+        <button class="btn-primary" id="quickAddBtn">+ Add Task</button>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+
+      <!-- Left Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">GTD VIEWS</div>
+          <nav class="sidebar-nav">
+            <button class="nav-item active" data-view="inbox">
+              <span class="nav-icon">⬇</span>
+              <span class="nav-label">Inbox</span>
+              <span class="nav-badge" id="inboxCount"></span>
+            </button>
+            <button class="nav-item" data-view="next">
+              <span class="nav-icon">⚡</span>
+              <span class="nav-label">Next Actions</span>
+              <span class="nav-badge" id="nextCount"></span>
+            </button>
+            <button class="nav-item" data-view="waiting">
+              <span class="nav-icon">⏳</span>
+              <span class="nav-label">Waiting For</span>
+              <span class="nav-badge" id="waitingCount"></span>
+            </button>
+            <button class="nav-item" data-view="someday">
+              <span class="nav-icon">💭</span>
+              <span class="nav-label">Someday / Maybe</span>
+            </button>
+            <button class="nav-item" data-view="done">
+              <span class="nav-icon">✓</span>
+              <span class="nav-label">Completed</span>
+            </button>
+          </nav>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label-row">
+            <div class="sidebar-label">PROJECTS</div>
+            <button class="sidebar-add-btn" id="addProjectBtn">+</button>
+          </div>
+          <div id="projectsList" class="projects-list"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">WEEK TRACKER</div>
+          <div id="weekTracker" class="week-tracker"></div>
+        </div>
+      </aside>
+
+      <!-- Calendar -->
+      <main class="calendar-area">
+        <div class="calendar-nav">
+          <button class="cal-nav-btn" id="prevMonth">&#8249;</button>
+          <h2 class="cal-title" id="calendarTitle"></h2>
+          <button class="cal-nav-btn" id="nextMonth">&#8250;</button>
+          <button class="cal-today-btn" id="todayBtn">Today</button>
+        </div>
+        <div class="calendar-wrapper">
+          <div class="calendar-day-headers">
+            <div class="week-num-spacer"></div>
+            <div>Mon</div><div>Tue</div><div>Wed</div>
+            <div>Thu</div><div>Fri</div>
+            <div class="weekend">Sat</div><div class="weekend">Sun</div>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+      </main>
+
+      <!-- Week Detail Panel -->
+      <aside class="week-panel">
+        <div class="week-panel-header">
+          <div>
+            <div class="week-panel-title" id="weekPanelTitle">Week —</div>
+            <div class="week-panel-dates" id="weekPanelDates">Select a week</div>
+          </div>
+          <button class="btn-generate" id="generateNoteBtn">📝 Obsidian</button>
+        </div>
+
+        <div class="tab-bar">
+          <button class="tab active" data-tab="all">All</button>
+          <button class="tab personal" data-tab="personal">Personal</button>
+          <button class="tab work" data-tab="work">Work</button>
+        </div>
+
+        <div class="week-tasks-container" id="weekTasksContainer">
+          <div class="empty-state">Select a week from the calendar</div>
+        </div>
+
+        <div class="week-notes-section">
+          <div class="week-notes-header">
+            <span>Week Notes</span>
+            <button class="save-notes-btn" id="saveNotesBtn">Save</button>
+          </div>
+          <textarea class="week-notes-textarea" id="weekNotesTextarea"
+            placeholder="Reflections, blockers, learnings…"></textarea>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Add / Edit Task Modal -->
+  <div class="modal-overlay hidden" id="taskModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="taskModalTitle">Add Task</h3>
+        <button class="modal-close-btn" id="taskModalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editTaskId">
+        <div class="form-group">
+          <label class="form-label">Title *</label>
+          <input type="text" id="fTaskTitle" class="form-input" placeholder="What needs to be done?">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Category</label>
+            <select id="fTaskCategory" class="form-select">
+              <option value="personal">Personal</option>
+              <option value="work">Work</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select id="fTaskPriority" class="form-select">
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">GTD Status</label>
+            <select id="fTaskStatus" class="form-select">
+              <option value="inbox">Inbox</option>
+              <option value="next">Next Action</option>
+              <option value="waiting">Waiting For</option>
+              <option value="someday">Someday</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Project</label>
+            <select id="fTaskProject" class="form-select">
+              <option value="">No Project</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Week #</label>
+            <input type="number" id="fTaskWeek" class="form-input" min="1" max="53" placeholder="e.g. 17">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Year</label>
+            <input type="number" id="fTaskYear" class="form-input" placeholder="e.g. 2026">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Context</label>
+          <input type="text" id="fTaskContext" class="form-input" placeholder="@home, @office, @computer…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <textarea id="fTaskNotes" class="form-textarea" placeholder="Details, links, references…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-danger hidden" id="deleteTaskBtn">Delete</button>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="taskModalCancel">Cancel</button>
+          <button class="btn-primary" id="taskModalSave">Save Task</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Project Modal -->
+  <div class="modal-overlay hidden" id="projectModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>New Project</h3>
+        <button class="modal-close-btn" id="projectModalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Project Name *</label>
+          <input type="text" id="fProjectName" class="form-input" placeholder="Project name">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Type</label>
+            <select id="fProjectType" class="form-select">
+              <option value="personal">Personal</option>
+              <option value="work">Work</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select id="fProjectStatus" class="form-select">
+              <option value="active">Active</option>
+              <option value="on-hold">On Hold</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="fProjectDesc" class="form-textarea" placeholder="What is this project about?"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div></div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="projectModalCancel">Cancel</button>
+          <button class="btn-primary" id="projectModalSave">Save Project</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Obsidian Export Modal -->
+  <div class="modal-overlay hidden" id="obsidianModalOverlay">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>Export to Obsidian</h3>
+        <button class="modal-close-btn" id="obsidianModalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Filename</label>
+          <input type="text" id="obsidianFilename" class="form-input">
+        </div>
+        <pre class="note-preview" id="notePreview"></pre>
+      </div>
+      <div class="modal-footer">
+        <div></div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="obsidianModalCancel">Cancel</button>
+          <button class="btn-secondary" id="copyNoteBtn">Copy</button>
+          <button class="btn-primary" id="downloadNoteBtn">Download .md</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
