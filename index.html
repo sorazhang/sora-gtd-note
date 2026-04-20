@@ -104,23 +104,32 @@
           <button class="btn-generate" id="generateNoteBtn">📝 Obsidian</button>
         </div>
 
-        <div class="tab-bar">
-          <button class="tab active" data-tab="all">All</button>
-          <button class="tab personal" data-tab="personal">Personal</button>
-          <button class="tab work" data-tab="work">Work</button>
+        <!-- Inbox Review View -->
+        <div id="inboxView" class="hidden">
+          <div class="inbox-summary" id="inboxSummary"></div>
+          <div class="inbox-list" id="inboxList"></div>
         </div>
 
-        <div class="week-tasks-container" id="weekTasksContainer">
-          <div class="empty-state">Select a week from the calendar</div>
-        </div>
-
-        <div class="week-notes-section">
-          <div class="week-notes-header">
-            <span>Week Notes</span>
-            <button class="save-notes-btn" id="saveNotesBtn">Save</button>
+        <!-- Week View -->
+        <div id="weekView">
+          <div class="tab-bar">
+            <button class="tab active" data-tab="all">All</button>
+            <button class="tab personal" data-tab="personal">Personal</button>
+            <button class="tab work" data-tab="work">Work</button>
           </div>
-          <textarea class="week-notes-textarea" id="weekNotesTextarea"
-            placeholder="Reflections, blockers, learnings…"></textarea>
+
+          <div class="week-tasks-container" id="weekTasksContainer">
+            <div class="empty-state">Select a week from the calendar</div>
+          </div>
+
+          <div class="week-notes-section">
+            <div class="week-notes-header">
+              <span>Week Notes</span>
+              <button class="save-notes-btn" id="saveNotesBtn">Save</button>
+            </div>
+            <textarea class="week-notes-textarea" id="weekNotesTextarea"
+              placeholder="Reflections, blockers, learnings…"></textarea>
+          </div>
         </div>
       </aside>
     </div>

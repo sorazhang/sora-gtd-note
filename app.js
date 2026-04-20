@@ -326,6 +326,123 @@ function selectWeek(week, year) {
   renderWeekTracker();
 }
 
+// ===== Right Panel Router =====
+
+function renderRightPanel() {
+  const inboxView = document.getElementById('inboxView');
+  const weekView = document.getElementById('weekView');
+  const panelHeader = document.querySelector('.week-panel-header');
+  const generateBtn = document.getElementById('generateNoteBtn');
+
+  if (state.activeView === 'inbox') {
+    inboxView.classList.remove('hidden');
+    weekView.classList.add('hidden');
+    panelHeader.querySelector('.week-panel-title').textContent = 'Inbox Review';
+    panelHeader.querySelector('.week-panel-dates').textContent = 'Process and sort your captured tasks';
+    generateBtn.classList.add('hidden');
+    renderInboxReview();
+  } else {
+    inboxView.classList.add('hidden');
+    weekView.classList.remove('hidden');
+    generateBtn.classList.remove('hidden');
+    renderWeekPanel();
+  }
+}
+
+// ===== Render: Inbox Review =====
+
+function renderInboxReview() {
+  const tasks = Store.tasks().filter(t => t.status === 'inbox');
+  const now = new Date();
+  const cw = isoWeek(now);
+  const cy = isoWeekYear(now);
+
+  const summary = document.getElementById('inboxSummary');
+  const list = document.getElementById('inboxList');
+
+  summary.innerHTML = tasks.length > 0
+    ? `<strong>${tasks.length} task${tasks.length > 1 ? 's' : ''}</strong> waiting to be processed`
+    : '';
+
+  if (tasks.length === 0) {
+    list.innerHTML = `
+      <div class="inbox-all-done">
+        <div class="done-icon">✓</div>
+        <strong>Inbox zero!</strong>
+        All tasks have been processed.
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  tasks.forEach(task => {
+    const card = document.createElement('div');
+    card.className = `inbox-card ${task.category}`;
+    card.dataset.id = task.id;
+
+    const projects = Store.projects();
+    const proj = task.project ? projects.find(p => p.id === task.project) : null;
+
+    card.innerHTML = `
+      <div class="inbox-card-top">
+        <div class="inbox-card-title">${escHtml(task.title)}</div>
+        <button class="inbox-card-edit" title="Edit task" data-action="edit">✎</button>
+      </div>
+      <div class="inbox-card-meta">
+        <span class="task-tag priority-${task.priority}">${task.priority}</span>
+        ${task.context ? `<span class="task-tag context">${escHtml(task.context)}</span>` : ''}
+        ${proj ? `<span class="task-tag status">${escHtml(proj.name)}</span>` : ''}
+        ${task.notes ? `<span class="task-tag status" title="${escHtml(task.notes)}">has notes</span>` : ''}
+      </div>
+      <div class="inbox-actions">
+        <button class="action-btn today" data-action="today">Today</button>
+        <button class="action-btn this-week" data-action="this-week">This Week (W${cw})</button>
+        <div class="week-picker-wrap">
+          <input class="week-picker-input" type="number" min="1" max="53"
+            value="${cw + 1}" placeholder="Wk" title="Schedule to week">
+          <button class="week-picker-confirm" data-action="schedule">→ Week</button>
+        </div>
+        <button class="action-btn someday" data-action="someday">Someday</button>
+        <button class="action-btn waiting" data-action="waiting">Waiting</button>
+        <button class="action-btn delete" data-action="delete">✕</button>
+      </div>`;
+
+    // Wire action buttons
+    card.querySelector('[data-action="edit"]').addEventListener('click', () => openTaskModal(task.id));
+    card.querySelector('[data-action="today"]').addEventListener('click', () =>
+      processInboxTask(task.id, 'next', cw, cy));
+    card.querySelector('[data-action="this-week"]').addEventListener('click', () =>
+      processInboxTask(task.id, 'next', cw, cy));
+    card.querySelector('[data-action="someday"]').addEventListener('click', () =>
+      processInboxTask(task.id, 'someday', null, null));
+    card.querySelector('[data-action="waiting"]').addEventListener('click', () =>
+      processInboxTask(task.id, 'waiting', null, null));
+    card.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      const tasks = Store.tasks().filter(t => t.id !== task.id);
+      Store.saveTasks(tasks);
+      renderAll();
+    });
+    card.querySelector('[data-action="schedule"]').addEventListener('click', () => {
+      const wInput = card.querySelector('.week-picker-input');
+      const wNum = parseInt(wInput.value);
+      if (wNum >= 1 && wNum <= 53) processInboxTask(task.id, 'next', wNum, cy);
+    });
+
+    list.appendChild(card);
+  });
+}
+
+function processInboxTask(taskId, newStatus, week, year) {
+  const tasks = Store.tasks();
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return;
+  task.status = newStatus;
+  if (week) task.week = week;
+  if (year) task.year = year;
+  Store.saveTasks(tasks);
+  renderAll();
+}
+
 // ===== Render: Week Panel =====
 
 function renderWeekPanel() {
@@ -746,7 +863,7 @@ function renderAll() {
   renderHeader();
   renderSidebar();
   renderCalendar();
-  renderWeekPanel();
+  renderRightPanel();
 }
 
 // ===== Event Listeners =====
@@ -781,6 +898,7 @@ function bindEvents() {
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.activeView = btn.dataset.view;
+      renderRightPanel();
     });
   });
 
@@ -862,10 +980,12 @@ function bindEvents() {
 function init() {
   seedData();
   bindEvents();
-  // Select current week on load
   const now = new Date();
   state.selectedWeek = isoWeek(now);
   state.selectedWeekYear = isoWeekYear(now);
+  state.activeView = 'week';
+  // set the week nav item active by default
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   renderAll();
 }
 
