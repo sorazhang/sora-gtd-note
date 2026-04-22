@@ -49,16 +49,28 @@ function todayStr() {
 
 // ===== Storage =====
 
-const KEYS = { tasks: 'gtd_tasks', projects: 'gtd_projects', weekNotes: 'gtd_week_notes' };
+const KEYS = { tasks: 'gtd_tasks', projects: 'gtd_projects', weekNotes: 'gtd_week_notes', todayPlan: 'gtd_today' };
 
 const Store = {
-  tasks() { return JSON.parse(localStorage.getItem(KEYS.tasks) || '[]'); },
-  projects() { return JSON.parse(localStorage.getItem(KEYS.projects) || '[]'); },
-  weekNotes() { return JSON.parse(localStorage.getItem(KEYS.weekNotes) || '{}'); },
-  saveTasks(t) { localStorage.setItem(KEYS.tasks, JSON.stringify(t)); },
-  saveProjects(p) { localStorage.setItem(KEYS.projects, JSON.stringify(p)); },
-  saveWeekNotes(n) { localStorage.setItem(KEYS.weekNotes, JSON.stringify(n)); },
+  tasks()     { return JSON.parse(localStorage.getItem(KEYS.tasks)    || '[]'); },
+  projects()  { return JSON.parse(localStorage.getItem(KEYS.projects) || '[]'); },
+  weekNotes() { return JSON.parse(localStorage.getItem(KEYS.weekNotes)|| '{}'); },
+  saveTasks(t)     { localStorage.setItem(KEYS.tasks,    JSON.stringify(t)); },
+  saveProjects(p)  { localStorage.setItem(KEYS.projects, JSON.stringify(p)); },
+  saveWeekNotes(n) { localStorage.setItem(KEYS.weekNotes,JSON.stringify(n)); },
+  todayPlan() {
+    const raw = JSON.parse(localStorage.getItem(KEYS.todayPlan) || 'null');
+    const key = todayDateKey();
+    if (!raw || raw.date !== key) return { date: key, taskIds: [] };
+    return raw;
+  },
+  saveTodayPlan(p) { localStorage.setItem(KEYS.todayPlan, JSON.stringify(p)); },
 };
+
+function todayDateKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 // ===== Seed Data =====
 
@@ -329,24 +341,268 @@ function selectWeek(week, year) {
 // ===== Right Panel Router =====
 
 function renderRightPanel() {
-  const inboxView = document.getElementById('inboxView');
-  const weekView = document.getElementById('weekView');
-  const panelHeader = document.querySelector('.week-panel-header');
-  const generateBtn = document.getElementById('generateNoteBtn');
+  const todayView  = document.getElementById('todayView');
+  const inboxView  = document.getElementById('inboxView');
+  const weekView   = document.getElementById('weekView');
+  const titleEl    = document.querySelector('.week-panel-title');
+  const datesEl    = document.querySelector('.week-panel-dates');
+  const generateBtn= document.getElementById('generateNoteBtn');
 
-  if (state.activeView === 'inbox') {
+  // hide all first
+  todayView.classList.add('hidden');
+  inboxView.classList.add('hidden');
+  weekView.classList.add('hidden');
+  generateBtn.classList.add('hidden');
+
+  if (state.activeView === 'today') {
+    todayView.classList.remove('hidden');
+    titleEl.textContent = "Today's Focus";
+    datesEl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
+    renderTodayView();
+  } else if (state.activeView === 'inbox') {
     inboxView.classList.remove('hidden');
-    weekView.classList.add('hidden');
-    panelHeader.querySelector('.week-panel-title').textContent = 'Inbox Review';
-    panelHeader.querySelector('.week-panel-dates').textContent = 'Process and sort your captured tasks';
-    generateBtn.classList.add('hidden');
+    titleEl.textContent = 'Inbox Review';
+    datesEl.textContent = 'Process and sort your captured tasks';
     renderInboxReview();
   } else {
-    inboxView.classList.add('hidden');
     weekView.classList.remove('hidden');
     generateBtn.classList.remove('hidden');
     renderWeekPanel();
   }
+}
+
+// ===== Today's Focus =====
+
+let focusState = { queue: [], doneIds: [] };
+
+function renderTodayView() {
+  const el     = document.getElementById('todayView');
+  const plan   = Store.todayPlan();
+  const tasks  = Store.tasks();
+  const cw     = isoWeek(new Date());
+  const cy     = isoWeekYear(new Date());
+
+  // Prune done tasks from queue
+  const queueIds = plan.taskIds.filter(id => {
+    const t = tasks.find(t => t.id === id);
+    return t && t.status !== 'done';
+  });
+  if (queueIds.length !== plan.taskIds.length) {
+    plan.taskIds = queueIds; Store.saveTodayPlan(plan);
+  }
+
+  const queueTasks = queueIds.map(id => tasks.find(t => t.id === id)).filter(Boolean);
+  const weekTasks  = tasks.filter(t =>
+    t.week === cw && t.year === cy && t.status !== 'done' && !queueIds.includes(t.id)
+  );
+  // Sort week tasks: high first, then by category
+  weekTasks.sort((a,b) => {
+    const p = { high:0, medium:1, low:2 };
+    return (p[a.priority]||1) - (p[b.priority]||1);
+  });
+
+  el.innerHTML = `
+    <div class="today-plan-header">
+      <div>
+        <div class="today-plan-date">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+        <div class="today-plan-sub">${queueTasks.length} in queue · ${weekTasks.length} remaining this week</div>
+      </div>
+      <button class="btn-focus-start" id="startFocusBtn" ${queueTasks.length===0?'disabled':''}>▶ Focus</button>
+    </div>
+    <div class="today-body">
+      <div>
+        <div class="today-section-title">
+          <span>🎯 Focus Queue (${queueTasks.length})</span>
+          ${queueTasks.length > 0 ? `<button class="today-action-link danger" id="clearQueueBtn">Clear all</button>` : ''}
+        </div>
+        ${queueTasks.length === 0
+          ? `<div class="today-empty">Add tasks from below to build your focus list</div>`
+          : queueTasks.map((t,i) => {
+              const proj = t.project ? Store.projects().find(p=>p.id===t.project) : null;
+              return `<div class="today-queue-item ${t.category}" style="margin-top:5px">
+                <span class="today-queue-num">${i+1}</span>
+                <span class="today-queue-title">${escHtml(t.title)}</span>
+                <span class="task-tag priority-${t.priority}">${t.priority}</span>
+                ${proj ? `<span class="task-tag status" style="max-width:70px;overflow:hidden;text-overflow:ellipsis">${escHtml(proj.name)}</span>` : ''}
+                <button class="today-queue-remove" data-remove="${t.id}">×</button>
+              </div>`;
+            }).join('')
+        }
+      </div>
+      <div>
+        <div class="today-section-title">
+          <span>📋 Week ${cw} — Pick tasks (${weekTasks.length})</span>
+          ${weekTasks.length > 0 ? `<button class="today-action-link" id="addAllBtn">Add all</button>` : ''}
+        </div>
+        ${weekTasks.length === 0
+          ? `<div class="today-empty">All this week's tasks are queued or done ✓</div>`
+          : weekTasks.map(t => {
+              const proj = t.project ? Store.projects().find(p=>p.id===t.project) : null;
+              return `<div class="today-pick-item" style="margin-top:5px">
+                <div class="today-pick-info">
+                  <span class="today-pick-title">${escHtml(t.title)}</span>
+                  <div class="today-pick-meta">
+                    <span class="task-tag priority-${t.priority}">${t.priority}</span>
+                    ${t.context ? `<span class="task-tag context">${escHtml(t.context)}</span>` : ''}
+                    ${proj ? `<span class="task-tag status">${escHtml(proj.name)}</span>` : ''}
+                  </div>
+                </div>
+                <button class="today-add-btn" data-add="${t.id}">+ Queue</button>
+              </div>`;
+            }).join('')
+        }
+      </div>
+    </div>`;
+
+  el.querySelector('#startFocusBtn')?.addEventListener('click', openFocusMode);
+  el.querySelector('#clearQueueBtn')?.addEventListener('click', () => {
+    const p = Store.todayPlan(); p.taskIds = []; Store.saveTodayPlan(p);
+    renderTodayView();
+  });
+  el.querySelector('#addAllBtn')?.addEventListener('click', () => {
+    const p = Store.todayPlan();
+    weekTasks.forEach(t => { if (!p.taskIds.includes(t.id)) p.taskIds.push(t.id); });
+    Store.saveTodayPlan(p); renderTodayView();
+  });
+  el.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = Store.todayPlan();
+      p.taskIds = p.taskIds.filter(id => id !== btn.dataset.remove);
+      Store.saveTodayPlan(p); renderTodayView();
+    });
+  });
+  el.querySelectorAll('[data-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = Store.todayPlan();
+      if (!p.taskIds.includes(btn.dataset.add)) p.taskIds.push(btn.dataset.add);
+      Store.saveTodayPlan(p); renderTodayView();
+    });
+  });
+}
+
+// ===== Focus Mode =====
+
+function openFocusMode() {
+  const plan  = Store.todayPlan();
+  const tasks = Store.tasks();
+  focusState.queue  = plan.taskIds.filter(id => {
+    const t = tasks.find(t => t.id === id);
+    return t && t.status !== 'done';
+  });
+  focusState.doneIds = [];
+  if (focusState.queue.length === 0) return;
+  renderFocusMode(0);
+  document.getElementById('focusModeOverlay').classList.remove('hidden');
+}
+
+function closeFocusMode() {
+  document.getElementById('focusModeOverlay').classList.add('hidden');
+  renderAll();
+}
+
+function renderFocusMode(index) {
+  const overlay  = document.getElementById('focusModeOverlay');
+  const allTasks = Store.tasks();
+  const projects = Store.projects();
+
+  const active = focusState.queue
+    .map(id => allTasks.find(t => t.id === id))
+    .filter(t => t && t.status !== 'done');
+
+  if (active.length === 0) {
+    overlay.innerHTML = `
+      <div class="focus-complete">
+        <div class="focus-complete-icon">🎉</div>
+        <h2>Session complete!</h2>
+        <p>All queued tasks are done — great work.</p>
+        <button class="btn-primary" style="margin-top:8px" id="focusDoneExitBtn">Back to planner</button>
+      </div>`;
+    overlay.querySelector('#focusDoneExitBtn').addEventListener('click', closeFocusMode);
+    return;
+  }
+
+  const i    = Math.max(0, Math.min(index, active.length - 1));
+  const task = active[i];
+  const proj = task.project ? projects.find(p => p.id === task.project) : null;
+
+  const related = proj
+    ? allTasks.filter(t => t.project === task.project && t.id !== task.id && t.status !== 'done').slice(0, 4)
+    : [];
+
+  const dots = active.map((t, di) =>
+    `<span class="focus-dot ${di < i ? 'done' : di === i ? 'active' : ''}" title="${escHtml(t.title)}"></span>`
+  ).join('');
+
+  overlay.innerHTML = `
+    <div class="focus-wrap">
+      <div class="focus-topbar">
+        <div class="focus-progress">
+          ${dots}
+          <span class="focus-count">${i+1} / ${active.length}</span>
+        </div>
+        <button class="focus-exit-btn" id="focusExitBtn">✕ Exit Focus</button>
+      </div>
+
+      <div class="focus-card ${task.category}">
+        <div class="focus-card-eyebrow">${task.category}${proj ? ' · ' + escHtml(proj.name) : ''}</div>
+        <div class="focus-card-title">${escHtml(task.title)}</div>
+        <div class="focus-card-chips">
+          <span class="task-tag priority-${task.priority}">${task.priority}</span>
+          ${task.context ? `<span class="task-tag context">${escHtml(task.context)}</span>` : ''}
+          <span class="task-tag status">${task.status}</span>
+        </div>
+        ${task.notes ? `<div class="focus-card-notes">${escHtml(task.notes)}</div>` : ''}
+      </div>
+
+      <div class="focus-actions">
+        <button class="focus-btn done" id="focusDoneBtn">✓ Done</button>
+        <button class="focus-btn skip" id="focusSkipBtn">→ Skip</button>
+        <button class="focus-btn edit" id="focusEditBtn">✎</button>
+      </div>
+
+      ${related.length > 0 ? `
+        <div class="focus-related">
+          <div class="focus-related-label">Related · ${escHtml(proj.name)}</div>
+          ${related.map(r => `
+            <div class="focus-related-row">
+              <span class="focus-related-name">${escHtml(r.title)}</span>
+              <button class="focus-related-promote" data-promote="${r.id}">do next →</button>
+            </div>`).join('')}
+        </div>` : ''}
+    </div>`;
+
+  overlay.querySelector('#focusExitBtn').addEventListener('click', closeFocusMode);
+
+  overlay.querySelector('#focusDoneBtn').addEventListener('click', () => {
+    toggleTaskDone(task.id);
+    focusState.doneIds.push(task.id);
+    renderFocusMode(i); // active list shrinks, same index lands on next task
+  });
+
+  overlay.querySelector('#focusSkipBtn').addEventListener('click', () => {
+    // Move current task to end of queue
+    focusState.queue = [...focusState.queue.filter(id => id !== task.id), task.id];
+    renderFocusMode(i); // same index, next task is now at position i
+  });
+
+  overlay.querySelector('#focusEditBtn').addEventListener('click', () => {
+    closeFocusMode();
+    openTaskModal(task.id);
+  });
+
+  overlay.querySelectorAll('[data-promote]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rid = btn.dataset.promote;
+      // Add to queue right after current if not already there
+      if (!focusState.queue.includes(rid)) {
+        focusState.queue.splice(i + 1, 0, rid);
+        // Also add to today plan
+        const p = Store.todayPlan();
+        if (!p.taskIds.includes(rid)) { p.taskIds.splice(i+1, 0, rid); Store.saveTodayPlan(p); }
+      }
+      renderFocusMode(i + 1);
+    });
+  });
 }
 
 // ===== Render: Inbox Review =====

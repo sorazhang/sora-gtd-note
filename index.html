@@ -35,6 +35,10 @@
         <div class="sidebar-section">
           <div class="sidebar-label">GTD VIEWS</div>
           <nav class="sidebar-nav">
+            <button class="nav-item" data-view="today">
+              <span class="nav-icon">🎯</span>
+              <span class="nav-label">Today's Focus</span>
+            </button>
             <button class="nav-item active" data-view="inbox">
               <span class="nav-icon">⬇</span>
               <span class="nav-label">Inbox</span>
@@ -103,6 +107,9 @@
           </div>
           <button class="btn-generate" id="generateNoteBtn">📝 Obsidian</button>
         </div>
+
+        <!-- Today's Focus View -->
+        <div id="todayView" class="hidden"></div>
 
         <!-- Inbox Review View -->
         <div id="inboxView" class="hidden">
@@ -279,6 +286,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Focus Mode Overlay -->
+  <div id="focusModeOverlay" class="hidden"></div>
 
   <script src="app.js"></script>
 </body>
