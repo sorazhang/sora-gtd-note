@@ -123,7 +123,8 @@ let state = {
   calYear: today.getFullYear(),
   selectedWeek: isoWeek(today),
   selectedWeekYear: isoWeekYear(today),
-  activeView: 'inbox',
+  selectedDay: null,   // 'YYYY-MM-DD' when a specific day cell is clicked
+  activeView: 'week',
   activeTab: 'all',
   editingTaskId: null,
 };
@@ -287,8 +288,13 @@ function renderCalendar() {
       const isToday = dk === todayKey;
       const isWeekend = day.getDay() === 0 || day.getDay() === 6;
 
+      const isDaySelected = dk === state.selectedDay;
       const cell = document.createElement('div');
-      cell.className = `day-cell${isOther ? ' other-month' : ''}${isToday ? ' today' : ''}${isWeekend ? ' weekend' : ''}`;
+      cell.className = `day-cell${isOther ? ' other-month' : ''}${isToday ? ' today' : ''}${isWeekend ? ' weekend' : ''}${isDaySelected ? ' day-selected' : ''}`;
+      cell.addEventListener('click', e => {
+        e.stopPropagation();
+        selectDay(dk, wNum, wYear);
+      });
 
       const numEl = document.createElement('div');
       numEl.className = 'day-number';
@@ -328,19 +334,34 @@ function renderCalendar() {
   });
 }
 
-// ===== Select Week =====
+// ===== Select Week / Day =====
 
 function selectWeek(week, year) {
   state.selectedWeek = week;
   state.selectedWeekYear = year;
+  state.selectedDay = null;
+  state.activeView = 'week';
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   renderCalendar();
-  renderWeekPanel();
+  renderRightPanel();
+  renderWeekTracker();
+}
+
+function selectDay(dayKey, weekNum, weekYear) {
+  state.selectedDay = dayKey;
+  state.selectedWeek = weekNum;
+  state.selectedWeekYear = weekYear;
+  state.activeView = 'week';
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  renderCalendar();
+  renderRightPanel();
   renderWeekTracker();
 }
 
 // ===== Right Panel Router =====
 
 function renderRightPanel() {
+  const dayView    = document.getElementById('dayView');
   const todayView  = document.getElementById('todayView');
   const inboxView  = document.getElementById('inboxView');
   const weekView   = document.getElementById('weekView');
@@ -348,10 +369,7 @@ function renderRightPanel() {
   const datesEl    = document.querySelector('.week-panel-dates');
   const generateBtn= document.getElementById('generateNoteBtn');
 
-  // hide all first
-  todayView.classList.add('hidden');
-  inboxView.classList.add('hidden');
-  weekView.classList.add('hidden');
+  [dayView, todayView, inboxView, weekView].forEach(el => el.classList.add('hidden'));
   generateBtn.classList.add('hidden');
 
   if (state.activeView === 'today') {
@@ -364,11 +382,80 @@ function renderRightPanel() {
     titleEl.textContent = 'Inbox Review';
     datesEl.textContent = 'Process and sort your captured tasks';
     renderInboxReview();
+  } else if (state.selectedDay) {
+    dayView.classList.remove('hidden');
+    generateBtn.classList.remove('hidden');
+    const d = new Date(state.selectedDay + 'T00:00:00');
+    titleEl.textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    const { start, end } = weekRange(state.selectedWeek, state.selectedWeekYear);
+    datesEl.textContent = `Week ${state.selectedWeek} · ${formatDateShort(start)}–${formatDateShort(end)}`;
+    renderDayView();
   } else {
     weekView.classList.remove('hidden');
     generateBtn.classList.remove('hidden');
     renderWeekPanel();
   }
+}
+
+// ===== Render: Day View =====
+
+function renderDayView() {
+  const el = document.getElementById('dayView');
+  const { selectedDay: dk, selectedWeek: w, selectedWeekYear: y } = state;
+  const tasks    = Store.tasks();
+  const notes    = Store.weekNotes();
+  const weekKey  = `${y}-W${w}`;
+
+  // Day-pinned tasks (t.day === dk)
+  const pinned     = tasks.filter(t => t.day === dk && t.status !== 'done');
+  const pinnedDone = tasks.filter(t => t.day === dk && t.status === 'done');
+
+  // Week tasks with no specific day (context)
+  const weekActive = tasks.filter(t => t.week === w && t.year === y && !t.day && t.status !== 'done');
+  const weekDone   = tasks.filter(t => t.week === w && t.year === y && !t.day && t.status === 'done');
+
+  el.innerHTML = `
+    <div class="day-notes-bar">
+      <div class="day-notes-head">
+        <span class="day-notes-label">Week ${w} Notes</span>
+        <button class="save-notes-btn" id="dayNotesSaveBtn">Save</button>
+      </div>
+      <textarea class="day-notes-ta" id="dayNotesTa"
+        placeholder="Week ${w} reflections, blockers, learnings…">${escHtml(notes[weekKey] || '')}</textarea>
+    </div>
+    <div class="day-tasks-scroll">
+      <div>
+        <div class="day-section-head">
+          <span>📌 Day tasks <span class="day-pinned-chip">${pinned.length + pinnedDone.length}</span></span>
+          <button class="today-action-link" id="addPinnedBtn">+ Add</button>
+        </div>
+        <div id="dayPinnedList" style="margin-top:6px"></div>
+      </div>
+      <div>
+        <div class="day-section-head">
+          <span>📋 Week ${w} tasks <span class="day-pinned-chip" style="background:#f0fdf4;color:#166534">${weekActive.length + weekDone.length}</span></span>
+          <button class="today-action-link" id="addWeekBtn">+ Add</button>
+        </div>
+        <div id="dayWeekList" style="margin-top:6px"></div>
+      </div>
+    </div>`;
+
+  const pinnedList = el.querySelector('#dayPinnedList');
+  const weekList   = el.querySelector('#dayWeekList');
+
+  if (pinned.length + pinnedDone.length === 0) {
+    pinnedList.innerHTML = '<div class="today-empty">No tasks pinned to this day — use "+ Add" or set a Specific Day in any task</div>';
+  }
+  [...pinned, ...pinnedDone].forEach(t => pinnedList.appendChild(buildTaskCard(t)));
+
+  if (weekActive.length + weekDone.length === 0) {
+    weekList.innerHTML = '<div class="today-empty">No week tasks yet</div>';
+  }
+  [...weekActive, ...weekDone].forEach(t => weekList.appendChild(buildTaskCard(t)));
+
+  el.querySelector('#dayNotesSaveBtn').addEventListener('click', saveWeekNotes);
+  el.querySelector('#addPinnedBtn').addEventListener('click', () => openTaskModal(null, dk));
+  el.querySelector('#addWeekBtn').addEventListener('click', () => openTaskModal(null, null));
 }
 
 // ===== Today's Focus =====
@@ -829,6 +916,14 @@ function buildTaskCard(task) {
     }
   }
 
+  if (task.day) {
+    const d = new Date(task.day + 'T00:00:00');
+    const dayTag = document.createElement('span');
+    dayTag.className = 'day-pinned-chip';
+    dayTag.textContent = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    meta.appendChild(dayTag);
+  }
+
   body.appendChild(titleEl);
   body.appendChild(meta);
   card.appendChild(checkEl);
@@ -856,13 +951,12 @@ function toggleTaskDone(id) {
 
 // ===== Task Modal =====
 
-function openTaskModal(taskId) {
+function openTaskModal(taskId, prefillDay = null) {
   state.editingTaskId = taskId;
   const modal = document.getElementById('taskModalOverlay');
   const titleEl = document.getElementById('taskModalTitle');
   const deleteBtn = document.getElementById('deleteTaskBtn');
 
-  // Populate project dropdown
   populateProjectDropdown('fTaskProject');
 
   if (taskId) {
@@ -878,6 +972,7 @@ function openTaskModal(taskId) {
     document.getElementById('fTaskProject').value = task.project || '';
     document.getElementById('fTaskWeek').value = task.week || '';
     document.getElementById('fTaskYear').value = task.year || '';
+    document.getElementById('fTaskDay').value = task.day || '';
     document.getElementById('fTaskContext').value = task.context || '';
     document.getElementById('fTaskNotes').value = task.notes || '';
   } else {
@@ -885,12 +980,13 @@ function openTaskModal(taskId) {
     deleteBtn.classList.add('hidden');
     document.getElementById('editTaskId').value = '';
     document.getElementById('fTaskTitle').value = '';
-    document.getElementById('fTaskCategory').value = 'personal';
+    document.getElementById('fTaskCategory').value = 'work';
     document.getElementById('fTaskPriority').value = 'medium';
     document.getElementById('fTaskStatus').value = 'next';
     document.getElementById('fTaskProject').value = '';
     document.getElementById('fTaskWeek').value = state.selectedWeek || isoWeek(new Date());
     document.getElementById('fTaskYear').value = state.selectedWeekYear || isoWeekYear(new Date());
+    document.getElementById('fTaskDay').value = prefillDay || state.selectedDay || '';
     document.getElementById('fTaskContext').value = '';
     document.getElementById('fTaskNotes').value = '';
   }
@@ -911,6 +1007,7 @@ function saveTask() {
   const id = document.getElementById('editTaskId').value;
   const tasks = Store.tasks();
 
+  const rawDay = document.getElementById('fTaskDay').value;
   const taskData = {
     title,
     category: document.getElementById('fTaskCategory').value,
@@ -919,6 +1016,7 @@ function saveTask() {
     project: document.getElementById('fTaskProject').value,
     week: parseInt(document.getElementById('fTaskWeek').value) || isoWeek(new Date()),
     year: parseInt(document.getElementById('fTaskYear').value) || isoWeekYear(new Date()),
+    day: rawDay || null,
     context: document.getElementById('fTaskContext').value.trim(),
     notes: document.getElementById('fTaskNotes').value.trim(),
   };
@@ -1071,18 +1169,18 @@ function closeObsidianModal() {
 // ===== Save Week Notes =====
 
 function saveWeekNotes() {
-  const { selectedWeek: w, selectedWeekYear: y } = state;
+  const { selectedWeek: w, selectedWeekYear: y, selectedDay } = state;
   const notes = Store.weekNotes();
-  const val = document.getElementById('weekNotesTextarea').value;
-  if (val.trim()) {
-    notes[`${y}-W${w}`] = val;
-  } else {
-    delete notes[`${y}-W${w}`];
-  }
+  const taId  = selectedDay ? 'dayNotesTa' : 'weekNotesTextarea';
+  const btnId = selectedDay ? 'dayNotesSaveBtn' : 'saveNotesBtn';
+  const ta = document.getElementById(taId);
+  if (!ta) return;
+  const val = ta.value;
+  const key = `${y}-W${w}`;
+  if (val.trim()) notes[key] = val; else delete notes[key];
   Store.saveWeekNotes(notes);
-  const btn = document.getElementById('saveNotesBtn');
-  btn.textContent = 'Saved ✓';
-  setTimeout(() => btn.textContent = 'Save', 1500);
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.textContent = 'Saved ✓'; setTimeout(() => btn.textContent = 'Save', 1500); }
 }
 
 // ===== Export All =====

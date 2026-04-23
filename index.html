@@ -108,6 +108,9 @@
           <button class="btn-generate" id="generateNoteBtn">📝 Obsidian</button>
         </div>
 
+        <!-- Day View (clicking a specific day) -->
+        <div id="dayView" class="hidden"></div>
+
         <!-- Today's Focus View -->
         <div id="todayView" class="hidden"></div>
 
@@ -198,6 +201,10 @@
             <label class="form-label">Year</label>
             <input type="number" id="fTaskYear" class="form-input" placeholder="e.g. 2026">
           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Specific Day <span style="font-weight:400;color:var(--text-3)">(optional)</span></label>
+          <input type="date" id="fTaskDay" class="form-input">
         </div>
         <div class="form-group">
           <label class="form-label">Context</label>
