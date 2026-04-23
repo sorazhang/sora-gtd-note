@@ -275,10 +275,14 @@ function renderCalendar() {
     row.dataset.week = wNum;
     row.dataset.year = wYear;
 
-    // Week number cell
+    // Week number cell — click selects the whole week
     const wCell = document.createElement('div');
     wCell.className = 'week-num-cell';
     wCell.innerHTML = `<span class="week-num-label">W${wNum}</span>`;
+    wCell.addEventListener('click', e => {
+      e.stopPropagation();
+      selectWeek(wNum, wYear);
+    });
     row.appendChild(wCell);
 
     // Day cells
@@ -310,8 +314,8 @@ function renderCalendar() {
           chip.className = `day-task-chip ${t.category}${t.status === 'done' ? ' done' : ''}`;
           chip.textContent = t.title;
           chip.title = t.title;
-          chip.addEventListener('click', e => {
-            e.stopPropagation();
+          chip.addEventListener('click', () => {
+            // No stopPropagation — let click bubble to day cell so day gets selected too
             openTaskModal(t.id);
           });
           tasksEl.appendChild(chip);
@@ -329,7 +333,7 @@ function renderCalendar() {
       row.appendChild(cell);
     });
 
-    row.addEventListener('click', () => selectWeek(wNum, wYear));
+    // Row background click — do nothing (wCell handles week, day cells handle day)
     grid.appendChild(row);
   });
 }
