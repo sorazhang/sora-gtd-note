@@ -303,123 +303,10 @@ function renderWeekTracker() {
   });
 }
 
-// ===== Render: Calendar =====
+// ===== Render: Calendar (removed) =====
 
 function renderCalendar() {
-  const { calMonth, calYear } = state;
-  document.getElementById('calendarTitle').textContent = `${MONTHS[calMonth]} ${calYear}`;
-
-  const now = new Date();
-  const todayKey = todayStr();
-  const tasks = Store.tasks();
-
-  // Build a map: date string -> tasks
-  const tasksByDate = {};
-  tasks.forEach(t => {
-    if (!t.week || !t.year) return;
-    const { start, end } = weekRange(t.week, t.year);
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      if (!tasksByDate[k]) tasksByDate[k] = [];
-      tasksByDate[k].push(t);
-    }
-  });
-
-  const firstDay = new Date(calYear, calMonth, 1);
-  const firstDayOfWeek = (firstDay.getDay() + 6) % 7; // 0=Mon
-  const firstMonday = new Date(firstDay);
-  firstMonday.setDate(firstDay.getDate() - firstDayOfWeek);
-
-  const weeks = [];
-  let cursor = new Date(firstMonday);
-  while (cursor.getMonth() <= calMonth && cursor.getFullYear() <= calYear
-         || cursor < firstDay) {
-    if (cursor.getMonth() > calMonth && cursor.getFullYear() >= calYear) break;
-    const weekStart = new Date(cursor);
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      days.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    weeks.push({ weekStart, days });
-    if (cursor.getMonth() > calMonth || cursor.getFullYear() > calYear) break;
-  }
-
-  const grid = document.getElementById('calendarGrid');
-  grid.innerHTML = '';
-
-  weeks.forEach(({ weekStart, days }) => {
-    const wNum = isoWeek(weekStart);
-    const wYear = isoWeekYear(weekStart);
-    const isCurrentWeek = wNum === isoWeek(now) && wYear === isoWeekYear(now);
-    const isSelected = wNum === state.selectedWeek && wYear === state.selectedWeekYear;
-
-    const row = document.createElement('div');
-    row.className = `week-row${isCurrentWeek ? ' current-week-row' : ''}${isSelected ? ' selected' : ''}`;
-    row.dataset.week = wNum;
-    row.dataset.year = wYear;
-
-    // Week number cell — click selects the whole week
-    const wCell = document.createElement('div');
-    wCell.className = 'week-num-cell';
-    wCell.innerHTML = `<span class="week-num-label">W${wNum}</span>`;
-    wCell.addEventListener('click', e => {
-      e.stopPropagation();
-      selectWeek(wNum, wYear);
-    });
-    row.appendChild(wCell);
-
-    // Day cells
-    days.forEach(day => {
-      const dk = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
-      const isOther = day.getMonth() !== calMonth;
-      const isToday = dk === todayKey;
-      const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-
-      const isDaySelected = dk === state.selectedDay;
-      const cell = document.createElement('div');
-      cell.className = `day-cell${isOther ? ' other-month' : ''}${isToday ? ' today' : ''}${isWeekend ? ' weekend' : ''}${isDaySelected ? ' day-selected' : ''}`;
-      cell.addEventListener('click', e => {
-        e.stopPropagation();
-        selectDay(dk, wNum, wYear);
-      });
-
-      const numEl = document.createElement('div');
-      numEl.className = 'day-number';
-      numEl.textContent = day.getDate();
-      cell.appendChild(numEl);
-
-      const dayTasks = (tasksByDate[dk] || []).slice(0, 3);
-      if (dayTasks.length > 0) {
-        const tasksEl = document.createElement('div');
-        tasksEl.className = 'day-tasks';
-        dayTasks.forEach(t => {
-          const chip = document.createElement('div');
-          chip.className = `day-task-chip ${t.category}${t.status === 'done' ? ' done' : ''}`;
-          chip.textContent = t.title;
-          chip.title = t.title;
-          chip.addEventListener('click', () => {
-            // No stopPropagation — let click bubble to day cell so day gets selected too
-            openTaskModal(t.id);
-          });
-          tasksEl.appendChild(chip);
-        });
-        const all = (tasksByDate[dk] || []);
-        if (all.length > 3) {
-          const more = document.createElement('div');
-          more.className = 'day-more';
-          more.textContent = `+${all.length - 3} more`;
-          tasksEl.appendChild(more);
-        }
-        cell.appendChild(tasksEl);
-      }
-
-      row.appendChild(cell);
-    });
-
-    // Row background click — do nothing (wCell handles week, day cells handle day)
-    grid.appendChild(row);
-  });
+  // calendar view removed
 }
 
 // ===== Select Week / Day =====
@@ -1314,24 +1201,6 @@ function bindEvents() {
   // Header
   document.getElementById('quickAddBtn').addEventListener('click', () => openTaskModal(null));
   document.getElementById('exportAllBtn').addEventListener('click', exportAll);
-
-  // Calendar nav
-  document.getElementById('prevMonth').addEventListener('click', () => {
-    state.calMonth--;
-    if (state.calMonth < 0) { state.calMonth = 11; state.calYear--; }
-    renderCalendar();
-  });
-  document.getElementById('nextMonth').addEventListener('click', () => {
-    state.calMonth++;
-    if (state.calMonth > 11) { state.calMonth = 0; state.calYear++; }
-    renderCalendar();
-  });
-  document.getElementById('todayBtn').addEventListener('click', () => {
-    const now = new Date();
-    state.calMonth = now.getMonth();
-    state.calYear = now.getFullYear();
-    selectWeek(isoWeek(now), isoWeekYear(now));
-  });
 
   // Sidebar nav
   document.getElementById('addProjectBtn').addEventListener('click', openProjectModal);

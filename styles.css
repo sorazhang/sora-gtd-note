@@ -184,7 +184,7 @@ body {
 /* ===== Main Layout ===== */
 .main-layout {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr var(--week-panel-w);
+  grid-template-columns: var(--sidebar-w) 1fr;
   flex: 1;
   min-height: 0;
   overflow: hidden;
