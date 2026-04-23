@@ -153,6 +153,7 @@ function renderSidebar() {
   nextEl.textContent = countByStatus('next') || '';
   waitingEl.textContent = countByStatus('waiting') || '';
 
+  renderTSTSection();
   renderProjects();
   renderWeekTracker();
 }
@@ -178,6 +179,89 @@ function renderProjects() {
       btn.classList.toggle('active');
     });
   });
+}
+
+function renderTSTSection() {
+  const el = document.getElementById('tstSection');
+  if (!el) return;
+
+  const tasks   = Store.tasks();
+  const sw      = state.selectedWeek;
+  const sy      = state.selectedWeekYear;
+  const { start, end } = weekRange(sw, sy);
+  const todayDk = todayDateKey();
+  const now     = new Date();
+  const cwNum   = isoWeek(now);
+  const cyNum   = isoWeekYear(now);
+
+  // WST: week-level tasks (no specific day pinned) for selected week
+  const wstCount = tasks.filter(t => t.week === sw && t.year === sy && !t.day && t.status !== 'done').length;
+
+  // Build 7 day items with DST counts
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d  = new Date(start);
+    d.setDate(start.getDate() + i);
+    const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const dstCount = tasks.filter(t => t.day === dk && t.status !== 'done').length;
+    days.push({ d, dk, dstCount });
+  }
+
+  const isCurrentWeek = sw === cwNum && sy === cyNum;
+  const isWSTActive   = state.activeView === 'week' && !state.selectedDay && state.selectedWeek === sw;
+
+  el.innerHTML = `
+    <div class="tst-separator"></div>
+    <button class="tst-wst-btn${isWSTActive ? ' active' : ''}" id="tstWSTBtn">
+      <span class="nav-icon">📅</span>
+      <span class="tst-wst-label">W${sw} · Week Tasks${isCurrentWeek ? ' ●' : ''}</span>
+      ${wstCount > 0 ? `<span class="nav-badge">${wstCount}</span>` : ''}
+    </button>
+    <div class="tst-week-nav-row">
+      <button class="tst-nav-btn" id="tstPrev">‹</button>
+      <span class="tst-week-range">${formatDateShort(start)} – ${formatDateShort(end)}</span>
+      <button class="tst-nav-btn" id="tstNext">›</button>
+    </div>
+    ${days.map(({ d, dk, dstCount }) => {
+      const isToday    = dk === todayDk;
+      const isSelected = dk === state.selectedDay;
+      const dow  = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const date = `${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}`;
+      return `<button class="tst-day-item${isToday ? ' tst-today' : ''}${isSelected ? ' active' : ''}" data-dk="${dk}">
+        <span class="tst-dow">${dow}</span>
+        <span class="tst-date">${date}</span>
+        ${dstCount > 0 ? `<span class="nav-badge">${dstCount}</span>` : ''}
+      </button>`;
+    }).join('')}
+    <div class="tst-separator"></div>`;
+
+  el.querySelector('#tstWSTBtn').addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    selectWeek(sw, sy);
+  });
+  el.querySelector('#tstPrev').addEventListener('click', e => { e.stopPropagation(); navigateTSTWeek(-1); });
+  el.querySelector('#tstNext').addEventListener('click', e => { e.stopPropagation(); navigateTSTWeek(1); });
+  el.querySelectorAll('.tst-day-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      selectDay(btn.dataset.dk, sw, sy);
+    });
+  });
+}
+
+function navigateTSTWeek(delta) {
+  let w = state.selectedWeek + delta;
+  let y = state.selectedWeekYear;
+  if (w < 1)  { y--; w = 52; }
+  if (w > 52) { y++; w = 1;  }
+  state.selectedWeek = w;
+  state.selectedWeekYear = y;
+  state.selectedDay = null;
+  // Scroll calendar to the correct month
+  const { start } = weekRange(w, y);
+  state.calMonth = start.getMonth();
+  state.calYear  = start.getFullYear();
+  renderAll();
 }
 
 function renderWeekTracker() {
@@ -348,7 +432,7 @@ function selectWeek(week, year) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   renderCalendar();
   renderRightPanel();
-  renderWeekTracker();
+  renderSidebar();
 }
 
 function selectDay(dayKey, weekNum, weekYear) {
@@ -359,7 +443,7 @@ function selectDay(dayKey, weekNum, weekYear) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   renderCalendar();
   renderRightPanel();
-  renderWeekTracker();
+  renderSidebar();
 }
 
 // ===== Right Panel Router =====

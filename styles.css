@@ -886,6 +886,74 @@ body {
 /* Utilities */
 .hidden { display: none !important; }
 
+/* ===== TST — Time Specified Tasks sidebar section ===== */
+.tst-separator {
+  height: 1px;
+  background: var(--sidebar-border);
+  margin: 5px 4px;
+}
+
+.tst-wst-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--sidebar-text);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background .12s, color .12s;
+}
+.tst-wst-btn:hover  { background: var(--sidebar-hover); color: var(--sidebar-active-text); }
+.tst-wst-btn.active { background: var(--sidebar-active-bg); color: var(--sidebar-active-text); }
+.tst-wst-label { flex: 1; }
+
+.tst-week-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px 4px 32px;
+}
+.tst-week-range { font-size: 10px; color: var(--sidebar-label); flex: 1; text-align: center; }
+.tst-nav-btn {
+  background: transparent;
+  border: none;
+  color: var(--sidebar-label);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: color .12s, background .12s;
+  line-height: 1.4;
+}
+.tst-nav-btn:hover { color: var(--sidebar-active-text); background: var(--sidebar-hover); }
+
+.tst-day-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 22px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--sidebar-text);
+  font-size: 11.5px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background .12s, color .12s;
+}
+.tst-day-item:hover  { background: var(--sidebar-hover); color: var(--sidebar-active-text); }
+.tst-day-item.active { background: var(--sidebar-active-bg); color: #a5b4fc; }
+.tst-day-item.tst-today .tst-dow { color: #fcd34d; font-weight: 700; }
+
+.tst-dow  { font-size: 10.5px; font-weight: 700; width: 28px; flex-shrink: 0; text-transform: uppercase; letter-spacing: .03em; }
+.tst-date { flex: 1; font-size: 10.5px; opacity: .6; }
+
 /* ===== Day Cell: selected ===== */
 .day-cell {
   cursor: pointer;
