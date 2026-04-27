@@ -4,6 +4,16 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+const EFFORT_MINS = { '10min':10,'20min':20,'60min':60,'90min':90,'120min':120 };
+
+function calcRemainEffort(effort, progress) {
+  const mins = EFFORT_MINS[effort];
+  if (!mins || progress == null) return '';
+  const remain = Math.round(mins * (1 - progress / 100));
+  if (remain <= 0) return '0 min';
+  return remain >= 60 ? `${Math.round(remain/60*10)/10}h` : `${remain} min`;
+}
+
 function generateTaskId(projectId) {
   const projects = Store.projects();
   const tasks = Store.tasks();
@@ -533,14 +543,20 @@ function renderProjectGantt(linked, scroll) {
       cell.style.width = COL_W + 'px';
 
       if (task.week === week && task.year === year) {
-        const bar = document.createElement('div');
         const effort = task.effort;
+        const progress = task.progress || 0;
         const barClass = task.status === 'done' ? 'done'
           : task.category === 'work' ? 'work' : 'personal';
-        bar.className = `gantt-bar ${barClass}`;
         const effortLabel = effort && effort !== 'TBD' ? effort : '';
-        bar.textContent = effortLabel;
-        bar.title = `${task.title}${effortLabel ? ' · ' + effortLabel : ''}`;
+        const remain = calcRemainEffort(effort, progress);
+        const bar = document.createElement('div');
+        bar.className = `gantt-bar ${barClass}`;
+        bar.title = `${task.title}${effortLabel ? ' · ' + effortLabel : ''}${progress ? ' · ' + progress + '%' : ''}${remain ? ' · ' + remain + ' left' : ''}`;
+        if (progress > 0 && progress < 100) {
+          bar.innerHTML = `<div class="gantt-bar-done" style="width:${progress}%"></div><span class="gantt-bar-label">${progress}%</span>`;
+        } else {
+          bar.textContent = effortLabel;
+        }
         cell.appendChild(bar);
       }
       row.appendChild(cell);
@@ -1139,10 +1155,21 @@ function buildTaskCard(task) {
 
   if (task.effort && task.effort !== 'TBD') {
     const effortTag = document.createElement('span');
-    const cls = task.effort === '10min' ? 'min10' : task.effort === '20min' ? 'min20' : 'min60';
+    const cls = { '10min':'min10','20min':'min20','60min':'min60','90min':'min90','120min':'min120' }[task.effort] || 'min60';
     effortTag.className = `effort-badge ${cls}`;
     effortTag.textContent = task.effort;
     meta.appendChild(effortTag);
+  }
+
+  if (task.progress > 0) {
+    const remain = calcRemainEffort(task.effort, task.progress);
+    const progWrap = document.createElement('span');
+    progWrap.className = 'progress-inline';
+    progWrap.innerHTML = `
+      <span class="progress-bar-mini"><span class="progress-bar-fill" style="width:${task.progress}%"></span></span>
+      <span class="progress-pct">${task.progress}%</span>
+      ${remain ? `<span class="remain-badge">${remain} left</span>` : ''}`;
+    meta.appendChild(progWrap);
   }
 
   if (task.taskId) {
@@ -1203,6 +1230,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskPriority').value = task.priority;
     document.getElementById('fTaskStatus').value = task.status;
     document.getElementById('fTaskEffort').value = task.effort || 'TBD';
+    document.getElementById('fTaskProgress').value = task.progress ?? 0;
     projSelect.value = task.project || '';
     document.getElementById('fTaskWeek').value = task.week || '';
     document.getElementById('fTaskYear').value = task.year || '';
@@ -1218,6 +1246,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskPriority').value = 'medium';
     document.getElementById('fTaskStatus').value = 'next';
     document.getElementById('fTaskEffort').value = 'TBD';
+    document.getElementById('fTaskProgress').value = 0;
     projSelect.value = (defaults && defaults.project) || '';
     document.getElementById('fTaskWeek').value = state.selectedWeek || isoWeek(new Date());
     document.getElementById('fTaskYear').value = state.selectedWeekYear || isoWeekYear(new Date());
@@ -1226,6 +1255,15 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskNotes').value = '';
     document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   }
+
+  function updateRemain() {
+    const effort = document.getElementById('fTaskEffort').value;
+    const progress = parseInt(document.getElementById('fTaskProgress').value, 10);
+    document.getElementById('fTaskRemain').value = calcRemainEffort(effort, progress) || '—';
+  }
+  updateRemain();
+  document.getElementById('fTaskEffort').onchange = updateRemain;
+  document.getElementById('fTaskProgress').onchange = updateRemain;
 
   // Regenerate preview ID when project changes (new tasks only)
   projSelect.onchange = () => {
@@ -1256,6 +1294,7 @@ function saveTask() {
     priority: document.getElementById('fTaskPriority').value,
     status: document.getElementById('fTaskStatus').value,
     effort: document.getElementById('fTaskEffort').value,
+    progress: parseInt(document.getElementById('fTaskProgress').value, 10) || 0,
     project: projectVal,
     week: parseInt(document.getElementById('fTaskWeek').value) || isoWeek(new Date()),
     year: parseInt(document.getElementById('fTaskYear').value) || isoWeekYear(new Date()),

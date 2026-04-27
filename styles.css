@@ -1792,6 +1792,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
 }
 .gantt-bar.personal { background: var(--personal); }
 .gantt-bar.work     { background: var(--work); }
@@ -1846,10 +1847,64 @@ body {
   border: 1px solid #cbd5e1;
   white-space: nowrap;
 }
-.effort-badge.tbd  { color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; }
-.effort-badge.min10 { color: #059669; border-color: #a7f3d0; background: #ecfdf5; }
-.effort-badge.min20 { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
-.effort-badge.min60 { color: #d97706; border-color: #fde68a; background: #fffbeb; }
+.effort-badge.tbd   { color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; }
+.effort-badge.min10  { color: #059669; border-color: #a7f3d0; background: #ecfdf5; }
+.effort-badge.min20  { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+.effort-badge.min60  { color: #d97706; border-color: #fde68a; background: #fffbeb; }
+.effort-badge.min90  { color: #ea580c; border-color: #fed7aa; background: #fff7ed; }
+.effort-badge.min120 { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+
+/* Progress inline in task card */
+.progress-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.progress-bar-mini {
+  width: 36px;
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width .3s;
+}
+.progress-pct {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.remain-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: #d97706;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0 5px;
+}
+
+/* Gantt bar progress fill */
+.gantt-bar-done {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: rgba(0,0,0,0.20);
+  border-radius: 4px 0 0 4px;
+  pointer-events: none;
+}
+.gantt-bar-label {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
 
 /* ===== Responsive ===== */
 @media (max-width: 1100px) {
