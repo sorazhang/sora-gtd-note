@@ -760,133 +760,342 @@ function renderArchiveView() {
   });
 }
 
-// ===== Visual Board =====
+// ===== Visual Board (Graph View) =====
+
+let _graphAnim = null; // cancel handle for rAF loop
 
 function renderBoardView() {
-  const el       = document.getElementById('boardView');
+  // Cancel any previous animation loop
+  if (_graphAnim) { cancelAnimationFrame(_graphAnim); _graphAnim = null; }
+
+  const el = document.getElementById('boardView');
+  el.innerHTML = '';
+  el.style.background = '#0d0d12';
+  el.style.position = 'relative';
+  el.style.overflow = 'hidden';
+
   const projects = Store.projects();
   const tasks    = Store.tasks();
 
-  el.innerHTML = '';
-
-  const roots      = projects.filter(p => !p.parentId);
-  const standalone = tasks.filter(t => !t.project);
-
-  if (roots.length === 0 && standalone.length === 0) {
-    el.innerHTML = '<div class="empty-state" style="padding:40px">No projects or tasks yet. Create a project to get started.</div>';
+  if (projects.length === 0 && tasks.length === 0) {
+    el.style.background = '';
+    el.innerHTML = '<div class="empty-state" style="padding:40px">No projects or tasks yet.</div>';
     return;
   }
 
-  const scroll = document.createElement('div');
-  scroll.className = 'board-scroll';
-  el.appendChild(scroll);
+  // ── Build nodes ──────────────────────────────────────────────────
+  const nodes = [], edges = [], nodeMap = {};
+  const W = el.clientWidth || 700, H = el.clientHeight || 500;
+  const cx = W / 2, cy = H / 2;
 
-  roots.forEach(root => {
-    scroll.appendChild(buildBoardProjectCard(root, projects, tasks, 0));
+  // Project nodes
+  projects.forEach(p => {
+    const n = {
+      id: p.id, type: 'project', label: p.name,
+      r: p.parentId ? 10 : 14,
+      color: p.type === 'work' ? '#10b981' : '#3b82f6',
+      glow:  p.type === 'work' ? '#34d39966' : '#60a5fa66',
+      data: p,
+      x: cx + (Math.random() - 0.5) * W * 0.6,
+      y: cy + (Math.random() - 0.5) * H * 0.6,
+      vx: 0, vy: 0, pinned: false,
+    };
+    nodes.push(n); nodeMap[p.id] = n;
   });
 
-  // Standalone tasks column
-  const active = standalone.filter(t => t.status !== 'done');
-  const done   = standalone.filter(t => t.status === 'done');
-  if (standalone.length > 0) {
-    const card = document.createElement('div');
-    card.className = 'board-card board-standalone';
-    card.innerHTML = `
-      <div class="board-card-top">
-        <div class="board-card-header">
-          <div class="board-card-icon">◈</div>
-          <div class="board-card-meta">
-            <div class="board-card-title">Standalone Tasks</div>
-            <div class="board-card-sub">${active.length} active · ${done.length} done</div>
-          </div>
-        </div>
-      </div>
-      <div class="board-task-list">
-        ${active.map(t => buildBoardTaskHtml(t)).join('')}
-        ${done.length > 0 ? `<div class="board-done-label">Completed (${done.length})</div>${done.map(t => buildBoardTaskHtml(t, true)).join('')}` : ''}
-      </div>`;
-    card.querySelectorAll('.board-task-row').forEach(row => {
-      row.addEventListener('click', () => openTaskModal(row.dataset.id));
-    });
-    scroll.appendChild(card);
+  // Task nodes
+  tasks.forEach(t => {
+    const hasProj = t.project && nodeMap[t.project];
+    const n = {
+      id: t.id, type: 'task', label: t.title,
+      r: t.status === 'done' ? 3.5 : 5,
+      color: hasProj
+        ? (t.category === 'work' ? '#34d399' : '#60a5fa')
+        : '#6b7280',
+      glow: hasProj
+        ? (t.category === 'work' ? '#34d39944' : '#60a5fa44')
+        : '#6b728033',
+      data: t,
+      x: cx + (Math.random() - 0.5) * W * 0.7,
+      y: cy + (Math.random() - 0.5) * H * 0.7,
+      vx: 0, vy: 0, pinned: false,
+    };
+    nodes.push(n); nodeMap[t.id] = n;
+  });
+
+  // ── Build edges ──────────────────────────────────────────────────
+  projects.forEach(p => {
+    if (p.parentId && nodeMap[p.parentId])
+      edges.push({ a: nodeMap[p.parentId], b: nodeMap[p.id], type: 'parent' });
+  });
+  tasks.forEach(t => {
+    if (t.project && nodeMap[t.project])
+      edges.push({ a: nodeMap[t.project], b: nodeMap[t.id], type: 'task' });
+  });
+
+  // ── Canvas setup ─────────────────────────────────────────────────
+  const canvas = document.createElement('canvas');
+  canvas.width  = W;
+  canvas.height = H;
+  canvas.style.cssText = 'position:absolute;inset:0;cursor:grab;';
+  el.appendChild(canvas);
+
+  // Tooltip
+  const tip = document.createElement('div');
+  tip.className = 'graph-tooltip hidden';
+  el.appendChild(tip);
+
+  // Legend
+  const legend = document.createElement('div');
+  legend.className = 'graph-legend';
+  legend.innerHTML = `
+    <span class="gl-dot" style="background:#3b82f6"></span>Personal project
+    <span class="gl-dot" style="background:#10b981"></span>Work project
+    <span class="gl-dot" style="background:#60a5fa;width:7px;height:7px"></span>Personal task
+    <span class="gl-dot" style="background:#34d399;width:7px;height:7px"></span>Work task
+    <span class="gl-dot" style="background:#6b7280;width:7px;height:7px"></span>Standalone
+    <span style="margin-left:10px;color:#555">Scroll: zoom · Drag: pan · Click: open</span>`;
+  el.appendChild(legend);
+
+  const ctx = canvas.getContext('2d');
+  let transform = { x: 0, y: 0, s: 1 };
+  let hovered = null, dragNode = null, panStart = null;
+  let alpha = 1.0; // simulation cooling
+
+  // ── Force simulation ─────────────────────────────────────────────
+  function tick() {
+    if (alpha < 0.001) alpha = 0;
+
+    if (alpha > 0) {
+      // Repulsion
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          let dx = b.x - a.x, dy = b.y - a.y;
+          const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+          const force = (2800 / (dist * dist)) * alpha;
+          dx /= dist; dy /= dist;
+          if (!a.pinned) { a.vx -= dx*force; a.vy -= dy*force; }
+          if (!b.pinned) { b.vx += dx*force; b.vy += dy*force; }
+        }
+      }
+
+      // Spring along edges
+      edges.forEach(({ a, b, type }) => {
+        const idealLen = type === 'parent' ? 120 : 70;
+        const k = type === 'parent' ? 0.06 : 0.04;
+        let dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const force = (dist - idealLen) * k * alpha;
+        dx /= dist; dy /= dist;
+        if (!a.pinned) { a.vx += dx*force; a.vy += dy*force; }
+        if (!b.pinned) { b.vx -= dx*force; b.vy -= dy*force; }
+      });
+
+      // Centre gravity
+      nodes.forEach(n => {
+        if (n.pinned) return;
+        n.vx += (cx - n.x) * 0.008 * alpha;
+        n.vy += (cy - n.y) * 0.008 * alpha;
+        n.vx *= 0.78; n.vy *= 0.78;
+        n.x  += n.vx;  n.y  += n.vy;
+      });
+
+      alpha *= 0.97;
+    }
+
+    draw();
+    _graphAnim = requestAnimationFrame(tick);
   }
-}
 
-function buildBoardProjectCard(proj, allProjects, allTasks, depth) {
-  const children   = allProjects.filter(p => p.parentId === proj.id);
-  const projTasks  = allTasks.filter(t => t.project === proj.id);
-  const active     = projTasks.filter(t => t.status !== 'done');
-  const done       = projTasks.filter(t => t.status === 'done');
-  const total      = projTasks.length;
-  const pct        = total ? Math.round(done.length / total * 100) : 0;
-  const notePreview = (proj.notes || proj.description || '').split('\n')[0].slice(0, 80);
+  // ── Draw ─────────────────────────────────────────────────────────
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0d0d12';
+    ctx.fillRect(0, 0, W, H);
 
-  const wrapper = document.createElement('div');
-  wrapper.className = `board-card-wrapper depth-${Math.min(depth, 3)}`;
+    ctx.save();
+    ctx.translate(transform.x, transform.y);
+    ctx.scale(transform.s, transform.s);
 
-  const card = document.createElement('div');
-  card.className = `board-card ${proj.type}${depth > 0 ? ' board-card-child' : ''}`;
-
-  card.innerHTML = `
-    <div class="board-card-top">
-      <div class="board-card-header" data-proj-id="${proj.id}">
-        <span class="board-type-dot ${proj.type}"></span>
-        <div class="board-card-meta">
-          <div class="board-card-title">${escHtml(proj.name)}</div>
-          <div class="board-card-sub">${proj.type} · <span class="board-status-${proj.status}">${proj.status}</span></div>
-        </div>
-        <button class="board-edit-btn" data-proj-id="${proj.id}">✎</button>
-      </div>
-      ${notePreview ? `<div class="board-note-preview">${escHtml(notePreview)}</div>` : ''}
-      ${total > 0 ? `
-        <div class="board-progress-row">
-          <div class="board-progress-bar"><div class="board-progress-fill ${proj.type}" style="width:${pct}%"></div></div>
-          <span class="board-progress-pct">${pct}% · ${done.length}/${total}</span>
-        </div>` : '<div class="board-no-tasks">No tasks yet</div>'}
-    </div>
-    ${active.length > 0 ? `
-    <div class="board-task-list">
-      ${active.slice(0, 6).map(t => buildBoardTaskHtml(t)).join('')}
-      ${active.length > 6 ? `<div class="board-task-more">+${active.length - 6} more tasks</div>` : ''}
-    </div>` : ''}
-  `;
-
-  card.querySelector('.board-card-header').addEventListener('click', () => selectProject(proj.id));
-  card.querySelector('.board-edit-btn').addEventListener('click', e => {
-    e.stopPropagation(); openProjectModal(proj.id);
-  });
-  card.querySelectorAll('.board-task-row').forEach(row => {
-    row.addEventListener('click', e => { e.stopPropagation(); openTaskModal(row.dataset.id); });
-  });
-
-  wrapper.appendChild(card);
-
-  // Children nested below
-  if (children.length > 0) {
-    const childrenWrap = document.createElement('div');
-    childrenWrap.className = 'board-children-wrap';
-    children.forEach(child => {
-      childrenWrap.appendChild(buildBoardProjectCard(child, allProjects, allTasks, depth + 1));
+    // Edges
+    edges.forEach(({ a, b, type }) => {
+      const lit = hovered && (hovered === a || hovered === b ||
+        edges.some(e => (e.a === hovered || e.b === hovered) && (e.a === a || e.b === a || e.b === b)));
+      const dimmed = hovered && !lit;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = dimmed
+        ? 'rgba(80,80,80,0.1)'
+        : type === 'parent'
+          ? `rgba(160,160,220,${lit ? 0.75 : 0.35})`
+          : `rgba(120,120,120,${lit ? 0.55 : 0.18})`;
+      ctx.lineWidth = type === 'parent' ? (lit ? 1.5 : 1) : (lit ? 1 : 0.5);
+      ctx.stroke();
     });
-    wrapper.appendChild(childrenWrap);
+
+    // Nodes
+    nodes.forEach(n => {
+      const isHov = n === hovered;
+      const connected = hovered && edges.some(e =>
+        (e.a === hovered && e.b === n) || (e.b === hovered && e.a === n));
+      const dimmed = hovered && !isHov && !connected;
+      ctx.globalAlpha = dimmed ? 0.18 : 1;
+
+      const r = isHov ? n.r * 1.7 : connected ? n.r * 1.25 : n.r;
+
+      // Glow
+      if (isHov || connected) {
+        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r + 12);
+        g.addColorStop(0, n.glow || n.color + '44');
+        g.addColorStop(1, 'transparent');
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + 12, 0, Math.PI*2);
+        ctx.fillStyle = g;
+        ctx.fill();
+      }
+
+      // Outer ring for projects
+      if (n.type === 'project') {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + 2.5, 0, Math.PI*2);
+        ctx.strokeStyle = n.color + (isHov ? 'cc' : '55');
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Node fill
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+      ctx.fillStyle = n.color;
+      ctx.fill();
+
+      // White inner dot for projects
+      if (n.type === 'project') {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r * 0.38, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fill();
+      }
+
+      // Progress arc for tasks with progress
+      if (n.type === 'task' && n.data.progress > 0) {
+        const pct = n.data.progress / 100;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + 1, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Label
+      if (n.type === 'project' || isHov) {
+        const fs = n.type === 'project' ? (isHov ? 12 : 11) : 10;
+        ctx.font = `${isHov ? 600 : 500} ${fs}px Inter,system-ui,sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const label = n.label.length > 22 ? n.label.slice(0, 20) + '…' : n.label;
+        const textY = n.y + r + 5;
+        // Text shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillText(label, n.x + 0.5, textY + 0.5);
+        ctx.fillStyle = isHov ? '#fff' : (n.type === 'project' ? 'rgba(220,220,220,0.85)' : 'rgba(180,180,180,0.7)');
+        ctx.fillText(label, n.x, textY);
+        ctx.textBaseline = 'alphabetic';
+      }
+
+      ctx.globalAlpha = 1;
+    });
+
+    ctx.restore();
   }
 
-  return wrapper;
-}
+  // ── Mouse helpers ─────────────────────────────────────────────────
+  function toWorld(ex, ey) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (ex - rect.left - transform.x) / transform.s,
+      y: (ey - rect.top  - transform.y) / transform.s,
+    };
+  }
 
-function buildBoardTaskHtml(t, isDone = false) {
-  const PRIORITY_COLOR = { high: '#ef4444', medium: '#f59e0b', low: '#6ee7b7' };
-  const remain = calcRemainEffort(t.effort, t.progress);
-  return `<div class="board-task-row${isDone ? ' done' : ''}" data-id="${t.id}">
-    <span class="board-task-priority" style="background:${PRIORITY_COLOR[t.priority] || '#e2e8f0'}"></span>
-    <span class="board-task-name">${escHtml(t.title)}</span>
-    <span class="board-task-badges">
-      ${t.effort && t.effort !== 'TBD' ? `<span class="board-task-badge">${t.effort}</span>` : ''}
-      ${t.progress > 0 ? `<span class="board-task-badge accent">${t.progress}%</span>` : ''}
-      ${remain && !isDone ? `<span class="board-task-badge warn">${remain}</span>` : ''}
-      ${t.taskId ? `<span class="board-task-badge mono">${escHtml(t.taskId)}</span>` : ''}
-    </span>
-  </div>`;
+  function hitNode(wx, wy) {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      const dx = wx - n.x, dy = wy - n.y;
+      if (dx*dx + dy*dy <= (n.r + 6) * (n.r + 6)) return n;
+    }
+    return null;
+  }
+
+  // ── Mouse events ──────────────────────────────────────────────────
+  canvas.addEventListener('mousemove', e => {
+    const { x, y } = toWorld(e.clientX, e.clientY);
+    const n = hitNode(x, y);
+    hovered = n;
+    canvas.style.cursor = n ? 'pointer' : (dragNode ? 'grabbing' : panStart ? 'grabbing' : 'grab');
+
+    if (n) {
+      tip.textContent = n.type === 'project'
+        ? `${n.label} · ${n.data.type} · ${n.data.status}`
+        : `${n.label}${n.data.effort && n.data.effort !== 'TBD' ? ' · ' + n.data.effort : ''}${n.data.progress ? ' · ' + n.data.progress + '%' : ''}`;
+      const rect = canvas.getBoundingClientRect();
+      tip.style.left = (e.clientX - rect.left + 12) + 'px';
+      tip.style.top  = (e.clientY - rect.top  - 28) + 'px';
+      tip.classList.remove('hidden');
+    } else {
+      tip.classList.add('hidden');
+    }
+
+    if (dragNode && !dragNode.pinned) {
+      dragNode.x = x; dragNode.y = y;
+      dragNode.vx = 0; dragNode.vy = 0;
+      alpha = Math.max(alpha, 0.1);
+    } else if (panStart) {
+      transform.x = panStart.tx + (e.clientX - panStart.mx);
+      transform.y = panStart.ty + (e.clientY - panStart.my);
+    }
+  });
+
+  canvas.addEventListener('mousedown', e => {
+    const { x, y } = toWorld(e.clientX, e.clientY);
+    const n = hitNode(x, y);
+    if (n) {
+      dragNode = n;
+      dragNode.pinned = true;
+    } else {
+      panStart = { mx: e.clientX, my: e.clientY, tx: transform.x, ty: transform.y };
+    }
+    canvas.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mouseup', e => {
+    if (dragNode) { dragNode.pinned = false; alpha = Math.max(alpha, 0.05); dragNode = null; }
+    panStart = null;
+    canvas.style.cursor = 'grab';
+  });
+
+  canvas.addEventListener('click', e => {
+    if (Math.abs(e.movementX) > 3 || Math.abs(e.movementY) > 3) return;
+    const { x, y } = toWorld(e.clientX, e.clientY);
+    const n = hitNode(x, y);
+    if (!n) return;
+    if (n.type === 'project') selectProject(n.id);
+    else openTaskModal(n.id);
+  });
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? 0.88 : 1.14;
+    transform.x = mx - (mx - transform.x) * delta;
+    transform.y = my - (my - transform.y) * delta;
+    transform.s = Math.max(0.2, Math.min(4, transform.s * delta));
+  }, { passive: false });
+
+  tick();
 }
 
 // ===== Right Panel Router =====
