@@ -102,7 +102,7 @@ function todayDateKey() {
 // ===== Seed Data =====
 
 function seedData() {
-  if (Store.tasks().length > 0) return;
+  if (localStorage.getItem(KEYS.tasks) !== null) return;
 
   const today = new Date();
   const cw = isoWeek(today);
@@ -2082,7 +2082,7 @@ function saveProject() {
 
   const id       = document.getElementById('editProjectId').value;
   const parentId = document.getElementById('fProjectParent').value;
-  const projects = Store.projects();
+  const projects = Store.allProjects();
 
   if (id) {
     const idx = projects.findIndex(p => p.id === id);
