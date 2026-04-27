@@ -2104,7 +2104,7 @@ function saveProject() {
   Store.saveProjects(projects);
   closeProjectModal();
   renderSidebar();
-  if (state.activeView === 'project') renderRightPanel();
+  if (state.activeView === 'project' || state.activeView === 'board') renderRightPanel();
 }
 
 // ===== Obsidian Export =====
