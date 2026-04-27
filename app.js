@@ -1246,7 +1246,7 @@ function renderDayView() {
     // Render active tasks with sequence controls, then done tasks
     const currentId = pinned.length > 0 ? pinned[0].id : null;
     [...pinned, ...pinnedDone].forEach((t, idx) => {
-      pinnedList.appendChild(buildDayPinnedCard(t, idx, allPinned, t.id === currentId));
+      pinnedList.appendChild(buildDayPinnedCard(t, idx, allPinned, t.id === currentId, dk));
     });
   }
 
@@ -1260,7 +1260,7 @@ function renderDayView() {
   el.querySelector('#addWeekBtn').addEventListener('click', () => openTaskModal(null, null));
 }
 
-function buildDayPinnedCard(task, idx, allPinned, isCurrent) {
+function buildDayPinnedCard(task, idx, allPinned, isCurrent, dk) {
   const projects = Store.projects();
   const proj = task.project ? projects.find(p => p.id === task.project) : null;
   const isDone = task.status === 'done';
