@@ -1193,7 +1193,10 @@ function renderDayView() {
   const { selectedDay: dk, selectedWeek: w, selectedWeekYear: y } = state;
   const tasks    = Store.tasks();
   const notes    = Store.weekNotes();
-  const weekKey  = `${y}-W${w}`;
+  const dayKey   = dk;  // e.g. "2026-04-27"
+
+  const d = new Date(dk + 'T00:00:00');
+  const dayLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
   // Day-pinned tasks (t.day === dk)
   const pinned     = tasks.filter(t => t.day === dk && t.status !== 'done');
@@ -1206,11 +1209,11 @@ function renderDayView() {
   el.innerHTML = `
     <div class="day-notes-bar">
       <div class="day-notes-head">
-        <span class="day-notes-label">Week ${w} Notes</span>
+        <span class="day-notes-label">${dayLabel} — Notes</span>
         <button class="save-notes-btn" id="dayNotesSaveBtn">Save</button>
       </div>
       <textarea class="day-notes-ta" id="dayNotesTa"
-        placeholder="Week ${w} reflections, blockers, learnings…">${escHtml(notes[weekKey] || '')}</textarea>
+        placeholder="Notes, reflections, or anything for this day…">${escHtml(notes[dayKey] || '')}</textarea>
     </div>
     <div class="day-tasks-scroll">
       <div>
@@ -1242,7 +1245,7 @@ function renderDayView() {
   }
   [...weekActive, ...weekDone].forEach(t => weekList.appendChild(buildTaskCard(t)));
 
-  el.querySelector('#dayNotesSaveBtn').addEventListener('click', saveWeekNotes);
+  el.querySelector('#dayNotesSaveBtn').addEventListener('click', saveDayNotes);
   el.querySelector('#addPinnedBtn').addEventListener('click', () => openTaskModal(null, dk));
   el.querySelector('#addWeekBtn').addEventListener('click', () => openTaskModal(null, null));
 }
@@ -2187,6 +2190,23 @@ date-range: "${formatDate(start)} → ${formatDate(end)}"
     md += `## Completed\n\n${completed.map(taskLine).join('\n')}\n\n`;
   }
 
+  // Day notes for days within this week that have notes
+  const allNotes = Store.weekNotes();
+  const { start: ws } = weekRange(week, year);
+  const dayNoteEntries = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(ws); d.setDate(ws.getDate() + i);
+    const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (allNotes[dk]) dayNoteEntries.push({ dk, note: allNotes[dk], d });
+  }
+  if (dayNoteEntries.length > 0) {
+    md += `## Day Notes\n\n`;
+    dayNoteEntries.forEach(({ dk, note, d }) => {
+      const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      md += `### ${label}\n\n${note}\n\n`;
+    });
+  }
+
   // Project status
   const weekProjects = [...new Set(tasks.filter(t => t.project).map(t => t.project))];
   if (weekProjects.length > 0) {
@@ -2220,17 +2240,28 @@ function closeObsidianModal() {
 // ===== Save Week Notes =====
 
 function saveWeekNotes() {
-  const { selectedWeek: w, selectedWeekYear: y, selectedDay } = state;
+  const { selectedWeek: w, selectedWeekYear: y } = state;
   const notes = Store.weekNotes();
-  const taId  = selectedDay ? 'dayNotesTa' : 'weekNotesTextarea';
-  const btnId = selectedDay ? 'dayNotesSaveBtn' : 'saveNotesBtn';
-  const ta = document.getElementById(taId);
+  const ta = document.getElementById('weekNotesTextarea');
   if (!ta) return;
   const val = ta.value;
   const key = `${y}-W${w}`;
   if (val.trim()) notes[key] = val; else delete notes[key];
   Store.saveWeekNotes(notes);
-  const btn = document.getElementById(btnId);
+  const btn = document.getElementById('saveNotesBtn');
+  if (btn) { btn.textContent = 'Saved ✓'; setTimeout(() => btn.textContent = 'Save', 1500); }
+}
+
+function saveDayNotes() {
+  const dk = state.selectedDay;
+  if (!dk) return;
+  const notes = Store.weekNotes();
+  const ta = document.getElementById('dayNotesTa');
+  if (!ta) return;
+  const val = ta.value;
+  if (val.trim()) notes[dk] = val; else delete notes[dk];
+  Store.saveWeekNotes(notes);
+  const btn = document.getElementById('dayNotesSaveBtn');
   if (btn) { btn.textContent = 'Saved ✓'; setTimeout(() => btn.textContent = 'Save', 1500); }
 }
 
