@@ -2254,7 +2254,7 @@ function bindEvents() {
   document.getElementById('exportAllBtn').addEventListener('click', exportAll);
 
   // Sidebar nav
-  document.getElementById('addProjectBtn').addEventListener('click', openProjectModal);
+  document.getElementById('addProjectBtn').addEventListener('click', () => openProjectModal());
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
