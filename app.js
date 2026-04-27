@@ -123,7 +123,8 @@ let state = {
   calYear: today.getFullYear(),
   selectedWeek: isoWeek(today),
   selectedWeekYear: isoWeekYear(today),
-  selectedDay: null,   // 'YYYY-MM-DD' when a specific day cell is clicked
+  selectedDay: null,       // 'YYYY-MM-DD' when a specific day cell is clicked
+  selectedProjectId: null, // project id when project view is active
   activeView: 'week',
   activeTab: 'all',
   editingTaskId: null,
@@ -175,10 +176,20 @@ function renderProjects() {
 
   el.querySelectorAll('.project-item').forEach(btn => {
     btn.addEventListener('click', () => {
-      // filter calendar to project tasks — highlight sidebar item
-      btn.classList.toggle('active');
+      selectProject(btn.dataset.projectId);
     });
   });
+}
+
+function selectProject(id) {
+  state.selectedProjectId = id;
+  state.activeView = 'project';
+  state.selectedDay = null;
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.project-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.projectId === id);
+  });
+  renderRightPanel();
 }
 
 function renderTSTSection() {
@@ -316,7 +327,9 @@ function selectWeek(week, year) {
   state.selectedWeekYear = year;
   state.selectedDay = null;
   state.activeView = 'week';
+  state.selectedProjectId = null;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.project-item').forEach(b => b.classList.remove('active'));
   renderCalendar();
   renderRightPanel();
   renderSidebar();
@@ -327,24 +340,102 @@ function selectDay(dayKey, weekNum, weekYear) {
   state.selectedWeek = weekNum;
   state.selectedWeekYear = weekYear;
   state.activeView = 'week';
+  state.selectedProjectId = null;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.project-item').forEach(b => b.classList.remove('active'));
   renderCalendar();
   renderRightPanel();
   renderSidebar();
 }
 
+// ===== Render: Project View =====
+
+function renderProjectView() {
+  const el = document.getElementById('projectView');
+  const proj = Store.projects().find(p => p.id === state.selectedProjectId);
+  if (!proj) { el.innerHTML = '<div class="empty-state">Project not found.</div>'; return; }
+
+  const tasks = Store.tasks();
+  const linked = tasks.filter(t => t.project === proj.id);
+  const active = linked.filter(t => t.status !== 'done');
+  const done   = linked.filter(t => t.status === 'done');
+
+  const STATUS_LABEL = { inbox:'Inbox', next:'Next Action', waiting:'Waiting For', someday:'Someday', done:'Done' };
+  const PRIORITY_DOT = { high:'🔴', medium:'🟡', low:'🟢' };
+
+  function taskRow(t) {
+    return `
+      <div class="proj-task-row" data-id="${t.id}">
+        <span class="proj-task-check ${t.status === 'done' ? 'done' : ''}">${t.status === 'done' ? '✓' : '○'}</span>
+        <span class="proj-task-title ${t.status === 'done' ? 'done' : ''}">${escHtml(t.title)}</span>
+        <span class="proj-task-meta">
+          ${PRIORITY_DOT[t.priority] || ''} <span class="proj-task-status ${t.category}">${STATUS_LABEL[t.status] || t.status}</span>
+          ${t.week ? `<span class="proj-task-week">W${t.week}</span>` : ''}
+        </span>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="proj-notes-section">
+      <div class="proj-notes-header">
+        <span class="proj-notes-label">Project Notes</span>
+        <button class="save-notes-btn" id="projNotesSaveBtn">Save</button>
+      </div>
+      <textarea class="proj-notes-textarea" id="projNotesTextarea"
+        placeholder="Vision, goals, sequence, key reminders…">${escHtml(proj.notes || proj.description || '')}</textarea>
+    </div>
+    <div class="proj-tasks-section">
+      <div class="proj-tasks-header">
+        <span>Tasks <span class="proj-task-count">${linked.length}</span></span>
+        <button class="btn-add-task-proj" id="projAddTaskBtn">+ Task</button>
+      </div>
+      <div class="proj-tasks-scroll">
+        ${active.length === 0 && done.length === 0
+          ? '<div class="empty-state" style="padding:24px">No tasks linked to this project yet.</div>'
+          : ''}
+        ${active.map(taskRow).join('')}
+        ${done.length > 0 ? `
+          <div class="proj-done-divider">Completed (${done.length})</div>
+          ${done.map(taskRow).join('')}
+        ` : ''}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('projNotesSaveBtn').addEventListener('click', saveProjectNotes);
+  document.getElementById('projAddTaskBtn').addEventListener('click', () => {
+    openTaskModal(null, { project: proj.id });
+  });
+  el.querySelectorAll('.proj-task-row').forEach(row => {
+    row.addEventListener('click', () => openTaskModal(row.dataset.id));
+  });
+}
+
+function saveProjectNotes() {
+  const text = document.getElementById('projNotesTextarea').value;
+  const projects = Store.projects();
+  const idx = projects.findIndex(p => p.id === state.selectedProjectId);
+  if (idx === -1) return;
+  projects[idx].notes = text;
+  Store.saveProjects(projects);
+  const btn = document.getElementById('projNotesSaveBtn');
+  btn.textContent = 'Saved ✓';
+  setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
+}
+
 // ===== Right Panel Router =====
 
 function renderRightPanel() {
-  const dayView    = document.getElementById('dayView');
-  const todayView  = document.getElementById('todayView');
-  const inboxView  = document.getElementById('inboxView');
-  const weekView   = document.getElementById('weekView');
-  const titleEl    = document.querySelector('.week-panel-title');
-  const datesEl    = document.querySelector('.week-panel-dates');
-  const generateBtn= document.getElementById('generateNoteBtn');
+  const dayView     = document.getElementById('dayView');
+  const todayView   = document.getElementById('todayView');
+  const inboxView   = document.getElementById('inboxView');
+  const weekView    = document.getElementById('weekView');
+  const projectView = document.getElementById('projectView');
+  const titleEl     = document.querySelector('.week-panel-title');
+  const datesEl     = document.querySelector('.week-panel-dates');
+  const generateBtn = document.getElementById('generateNoteBtn');
 
-  [dayView, todayView, inboxView, weekView].forEach(el => el.classList.add('hidden'));
+  [dayView, todayView, inboxView, weekView, projectView].forEach(el => el.classList.add('hidden'));
   generateBtn.classList.add('hidden');
 
   if (state.activeView === 'today') {
@@ -357,6 +448,14 @@ function renderRightPanel() {
     titleEl.textContent = 'Inbox Review';
     datesEl.textContent = 'Process and sort your captured tasks';
     renderInboxReview();
+  } else if (state.activeView === 'project') {
+    projectView.classList.remove('hidden');
+    const proj = Store.projects().find(p => p.id === state.selectedProjectId);
+    if (proj) {
+      titleEl.textContent = proj.name;
+      datesEl.textContent = proj.type.charAt(0).toUpperCase() + proj.type.slice(1) + ' · ' + proj.status;
+    }
+    renderProjectView();
   } else if (state.selectedDay) {
     dayView.classList.remove('hidden');
     generateBtn.classList.remove('hidden');
@@ -926,7 +1025,8 @@ function toggleTaskDone(id) {
 
 // ===== Task Modal =====
 
-function openTaskModal(taskId, prefillDay = null) {
+function openTaskModal(taskId, defaults = null) {
+  const prefillDay = defaults && defaults.day ? defaults.day : (typeof defaults === 'string' ? defaults : null);
   state.editingTaskId = taskId;
   const modal = document.getElementById('taskModalOverlay');
   const titleEl = document.getElementById('taskModalTitle');
@@ -958,7 +1058,7 @@ function openTaskModal(taskId, prefillDay = null) {
     document.getElementById('fTaskCategory').value = 'work';
     document.getElementById('fTaskPriority').value = 'medium';
     document.getElementById('fTaskStatus').value = 'next';
-    document.getElementById('fTaskProject').value = '';
+    document.getElementById('fTaskProject').value = (defaults && defaults.project) || '';
     document.getElementById('fTaskWeek').value = state.selectedWeek || isoWeek(new Date());
     document.getElementById('fTaskYear').value = state.selectedWeekYear || isoWeekYear(new Date());
     document.getElementById('fTaskDay').value = prefillDay || state.selectedDay || '';
@@ -1207,8 +1307,10 @@ function bindEvents() {
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.project-item').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.activeView = btn.dataset.view;
+      state.selectedProjectId = null;
       renderRightPanel();
     });
   });
