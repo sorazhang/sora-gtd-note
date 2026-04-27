@@ -72,7 +72,7 @@ function todayStr() {
 
 // ===== Storage =====
 
-const KEYS = { tasks: 'gtd_tasks', projects: 'gtd_projects', weekNotes: 'gtd_week_notes', todayPlan: 'gtd_today' };
+const KEYS = { tasks: 'gtd_tasks', projects: 'gtd_projects', weekNotes: 'gtd_week_notes', todayPlan: 'gtd_today', uiState: 'gtd_ui_state' };
 
 const Store = {
   allTasks()     { return JSON.parse(localStorage.getItem(KEYS.tasks)    || '[]'); },
@@ -92,6 +92,8 @@ const Store = {
     return raw;
   },
   saveTodayPlan(p) { localStorage.setItem(KEYS.todayPlan, JSON.stringify(p)); },
+  loadUIState()    { return JSON.parse(localStorage.getItem(KEYS.uiState) || 'null'); },
+  saveUIState(s)   { localStorage.setItem(KEYS.uiState, JSON.stringify(s)); },
 };
 
 function todayDateKey() {
@@ -236,6 +238,7 @@ function selectProject(id) {
   document.querySelectorAll('.project-item').forEach(b => {
     b.classList.toggle('active', b.dataset.projectId === id);
   });
+  saveUIState();
   renderRightPanel();
 }
 
@@ -377,6 +380,7 @@ function selectWeek(week, year) {
   state.selectedProjectId = null;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.project-item').forEach(b => b.classList.remove('active'));
+  saveUIState();
   renderCalendar();
   renderRightPanel();
   renderSidebar();
@@ -2258,6 +2262,7 @@ function bindEvents() {
       btn.classList.add('active');
       state.activeView = btn.dataset.view;
       state.selectedProjectId = null;
+      saveUIState();
       renderRightPanel();
     });
   });
@@ -2354,15 +2359,38 @@ function bindEvents() {
 
 // ===== Init =====
 
+function saveUIState() {
+  Store.saveUIState({
+    activeView: state.activeView,
+    selectedProjectId: state.selectedProjectId,
+    selectedWeek: state.selectedWeek,
+    selectedWeekYear: state.selectedWeekYear,
+  });
+}
+
 function init() {
   seedData();
   bindEvents();
   const now = new Date();
   state.selectedWeek = isoWeek(now);
   state.selectedWeekYear = isoWeekYear(now);
-  state.activeView = 'week';
-  // set the week nav item active by default
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+
+  // Restore last active view from localStorage
+  const saved = Store.loadUIState();
+  if (saved) {
+    state.activeView = saved.activeView || 'week';
+    state.selectedProjectId = saved.selectedProjectId || null;
+    if (saved.selectedWeek) state.selectedWeek = saved.selectedWeek;
+    if (saved.selectedWeekYear) state.selectedWeekYear = saved.selectedWeekYear;
+  } else {
+    state.activeView = 'week';
+  }
+
+  // Sync nav highlight to restored view
+  document.querySelectorAll('.nav-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === state.activeView);
+  });
+
   renderAll();
 }
 
