@@ -810,15 +810,21 @@ function renderBoardView() {
   // Task nodes
   tasks.forEach(t => {
     const hasProj = t.project && nodeMap[t.project];
+    const isDelegated = !!t.delegated;
     const n = {
       id: t.id, type: 'task', label: t.title,
-      r: t.status === 'done' ? 3.5 : 5,
-      color: hasProj
-        ? (t.category === 'work' ? '#34d399' : '#60a5fa')
-        : '#6b7280',
-      glow: hasProj
-        ? (t.category === 'work' ? '#34d39944' : '#60a5fa44')
-        : '#6b728033',
+      shape: isDelegated ? 'diamond' : 'circle',
+      r: t.status === 'done' ? 3.5 : (isDelegated ? 6 : 5),
+      color: isDelegated
+        ? '#f59e0b'
+        : hasProj
+          ? (t.category === 'work' ? '#34d399' : '#60a5fa')
+          : '#6b7280',
+      glow: isDelegated
+        ? '#f59e0b44'
+        : hasProj
+          ? (t.category === 'work' ? '#34d39944' : '#60a5fa44')
+          : '#6b728033',
       data: t,
       x: cx + (Math.random() - 0.5) * W * 0.7,
       y: cy + (Math.random() - 0.5) * H * 0.7,
@@ -858,6 +864,7 @@ function renderBoardView() {
     <span class="gl-dot" style="background:#60a5fa;width:7px;height:7px"></span>Personal task
     <span class="gl-dot" style="background:#34d399;width:7px;height:7px"></span>Work task
     <span class="gl-dot" style="background:#6b7280;width:7px;height:7px"></span>Standalone
+    <span class="gl-diamond"></span>Delegated
     <span style="margin-left:10px;color:#555">Scroll: zoom · Drag: pan · Click: open</span>`;
   el.appendChild(legend);
 
@@ -969,11 +976,26 @@ function renderBoardView() {
         ctx.stroke();
       }
 
-      // Node fill
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, r, 0, Math.PI*2);
-      ctx.fillStyle = n.color;
-      ctx.fill();
+      // Node fill — diamond for delegated tasks, circle otherwise
+      if (n.shape === 'diamond') {
+        ctx.beginPath();
+        ctx.moveTo(n.x,     n.y - r * 1.5);
+        ctx.lineTo(n.x + r, n.y);
+        ctx.lineTo(n.x,     n.y + r * 1.5);
+        ctx.lineTo(n.x - r, n.y);
+        ctx.closePath();
+        ctx.fillStyle = n.color;
+        ctx.fill();
+        // Amber border
+        ctx.strokeStyle = isHov ? '#fbbf24' : '#f59e0b88';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+        ctx.fillStyle = n.color;
+        ctx.fill();
+      }
 
       // White inner dot for projects
       if (n.type === 'project') {
@@ -993,7 +1015,7 @@ function renderBoardView() {
         ctx.stroke();
       }
 
-      // Label
+      // Label — also show delegatee name on hover
       if (n.type === 'project' || isHov) {
         const fs = n.type === 'project' ? (isHov ? 12 : 11) : 10;
         ctx.font = `${isHov ? 600 : 500} ${fs}px Inter,system-ui,sans-serif`;
@@ -1043,7 +1065,7 @@ function renderBoardView() {
     if (n) {
       tip.textContent = n.type === 'project'
         ? `${n.label} · ${n.data.type} · ${n.data.status}`
-        : `${n.label}${n.data.effort && n.data.effort !== 'TBD' ? ' · ' + n.data.effort : ''}${n.data.progress ? ' · ' + n.data.progress + '%' : ''}`;
+        : `${n.label}${n.data.delegated ? ' · ⇢ ' + n.data.delegated : ''}${n.data.effort && n.data.effort !== 'TBD' ? ' · ' + n.data.effort : ''}${n.data.progress ? ' · ' + n.data.progress + '%' : ''}`;
       const rect = canvas.getBoundingClientRect();
       tip.style.left = (e.clientX - rect.left + 12) + 'px';
       tip.style.top  = (e.clientY - rect.top  - 28) + 'px';
@@ -1921,6 +1943,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskWeek').value = task.week || '';
     document.getElementById('fTaskYear').value = task.year || '';
     document.getElementById('fTaskDay').value = task.day || '';
+    document.getElementById('fTaskDelegated').value = task.delegated || '';
     document.getElementById('fTaskContext').value = task.context || '';
     document.getElementById('fTaskNotes').value = task.notes || '';
   } else {
@@ -1937,6 +1960,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskWeek').value = state.selectedWeek || isoWeek(new Date());
     document.getElementById('fTaskYear').value = state.selectedWeekYear || isoWeekYear(new Date());
     document.getElementById('fTaskDay').value = prefillDay || state.selectedDay || '';
+    document.getElementById('fTaskDelegated').value = '';
     document.getElementById('fTaskContext').value = '';
     document.getElementById('fTaskNotes').value = '';
     document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
@@ -1985,6 +2009,7 @@ function saveTask() {
     week: parseInt(document.getElementById('fTaskWeek').value) || isoWeek(new Date()),
     year: parseInt(document.getElementById('fTaskYear').value) || isoWeekYear(new Date()),
     day: rawDay || null,
+    delegated: document.getElementById('fTaskDelegated').value.trim(),
     context: document.getElementById('fTaskContext').value.trim(),
     notes: document.getElementById('fTaskNotes').value.trim(),
   };
