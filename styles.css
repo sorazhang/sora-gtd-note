@@ -1089,14 +1089,14 @@ body {
 }
 
 /* ===== Panel View Switcher ===== */
-#dayView, #todayView, #inboxView, #weekView, #projectView, #boardView {
+#dayView, #todayView, #inboxView, #weekView, #projectView, #boardView, #archiveView {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-#dayView.hidden, #todayView.hidden, #inboxView.hidden, #weekView.hidden, #projectView.hidden, #boardView.hidden { display: none !important; }
+#dayView.hidden, #todayView.hidden, #inboxView.hidden, #weekView.hidden, #projectView.hidden, #boardView.hidden, #archiveView.hidden { display: none !important; }
 
 /* ===== Today's Focus Panel ===== */
 .today-plan-header {
@@ -2003,6 +2003,111 @@ body {
   font-weight: 700;
   color: #fff;
 }
+
+/* Archive button (replaces btn-danger) */
+.btn-archive {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #d1b700;
+  background: #fffbeb;
+  color: #92400e;
+  transition: background .12s;
+}
+.btn-archive:hover { background: #fef3c7; }
+
+/* ===== Archive View ===== */
+#archiveView { flex-direction: column; overflow: hidden; }
+
+.archive-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.archive-section { display: flex; flex-direction: column; gap: 6px; }
+
+.archive-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.archive-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  opacity: 0.75;
+  transition: opacity .15s;
+}
+.archive-row:hover { opacity: 1; }
+
+.archive-task-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%; flex-shrink: 0;
+}
+.archive-task-dot.personal { background: var(--personal); }
+.archive-task-dot.work     { background: var(--work); }
+
+.archive-row-info { flex: 1; min-width: 0; }
+.archive-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.archive-row-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+.archive-row-meta code {
+  font-family: monospace;
+  background: var(--bg);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.archive-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.archive-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: background .12s;
+}
+.archive-btn.restore {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+.archive-btn.restore:hover { background: #d1fae5; }
+.archive-btn.destroy {
+  background: #fff1f2;
+  color: #9f1239;
+  border-color: #fecdd3;
+}
+.archive-btn.destroy:hover { background: #ffe4e6; }
 
 /* ===== Visual Board ===== */
 #boardView {

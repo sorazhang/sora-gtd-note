@@ -70,6 +70,10 @@
               <span class="nav-icon">⬡</span>
               <span class="nav-label">Visual Board</span>
             </button>
+            <button class="nav-item" data-view="archive">
+              <span class="nav-icon">🗄</span>
+              <span class="nav-label">Archive</span>
+            </button>
           </nav>
         </div>
 
@@ -114,6 +118,9 @@
 
         <!-- Visual Board View -->
         <div id="boardView" class="hidden"></div>
+
+        <!-- Archive View -->
+        <div id="archiveView" class="hidden"></div>
 
         <!-- Week View -->
         <div id="weekView">
@@ -254,7 +261,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-danger hidden" id="deleteTaskBtn">Delete</button>
+        <button class="btn-archive hidden" id="deleteTaskBtn">Archive</button>
         <div class="modal-footer-right">
           <button class="btn-secondary" id="taskModalCancel">Cancel</button>
           <button class="btn-primary" id="taskModalSave">Save Task</button>
@@ -305,7 +312,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-danger hidden" id="deleteProjectBtn">Delete</button>
+        <button class="btn-archive hidden" id="deleteProjectBtn">Archive</button>
         <div class="modal-footer-right">
           <button class="btn-secondary" id="projectModalCancel">Cancel</button>
           <button class="btn-primary" id="projectModalSave">Save Project</button>

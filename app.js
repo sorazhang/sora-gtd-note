@@ -75,8 +75,12 @@ function todayStr() {
 const KEYS = { tasks: 'gtd_tasks', projects: 'gtd_projects', weekNotes: 'gtd_week_notes', todayPlan: 'gtd_today' };
 
 const Store = {
-  tasks()     { return JSON.parse(localStorage.getItem(KEYS.tasks)    || '[]'); },
-  projects()  { return JSON.parse(localStorage.getItem(KEYS.projects) || '[]'); },
+  allTasks()     { return JSON.parse(localStorage.getItem(KEYS.tasks)    || '[]'); },
+  allProjects()  { return JSON.parse(localStorage.getItem(KEYS.projects) || '[]'); },
+  tasks()        { return Store.allTasks().filter(t => !t.archived); },
+  projects()     { return Store.allProjects().filter(p => !p.archived); },
+  archivedTasks()    { return Store.allTasks().filter(t =>  t.archived); },
+  archivedProjects() { return Store.allProjects().filter(p =>  p.archived); },
   weekNotes() { return JSON.parse(localStorage.getItem(KEYS.weekNotes)|| '{}'); },
   saveTasks(t)     { localStorage.setItem(KEYS.tasks,    JSON.stringify(t)); },
   saveProjects(p)  { localStorage.setItem(KEYS.projects, JSON.stringify(p)); },
@@ -655,6 +659,107 @@ function saveProjectNotes() {
   setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
 }
 
+// ===== Archive View =====
+
+function renderArchiveView() {
+  const el = document.getElementById('archiveView');
+  el.innerHTML = '';
+
+  const archivedProjects = Store.archivedProjects();
+  const archivedTasks    = Store.archivedTasks();
+
+  if (archivedProjects.length === 0 && archivedTasks.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:40px;flex-direction:column;gap:8px"><div style="font-size:28px">🗄</div><div>Archive is empty</div><div style="font-size:11px;color:var(--text-3)">Archived projects and tasks appear here</div></div>';
+    return;
+  }
+
+  const scroll = document.createElement('div');
+  scroll.className = 'archive-scroll';
+  el.appendChild(scroll);
+
+  // --- Archived Projects ---
+  if (archivedProjects.length > 0) {
+    const projSection = document.createElement('div');
+    projSection.className = 'archive-section';
+    projSection.innerHTML = `<div class="archive-section-title">Projects (${archivedProjects.length})</div>`;
+
+    archivedProjects.forEach(proj => {
+      const row = document.createElement('div');
+      row.className = 'archive-row';
+      row.innerHTML = `
+        <span class="project-dot ${proj.type}"></span>
+        <div class="archive-row-info">
+          <span class="archive-row-name">${escHtml(proj.name)}</span>
+          <span class="archive-row-meta">${proj.type} · ${proj.status}</span>
+        </div>
+        <div class="archive-row-actions">
+          <button class="archive-btn restore" data-id="${proj.id}" data-type="project">Restore</button>
+          <button class="archive-btn destroy" data-id="${proj.id}" data-type="project">Delete forever</button>
+        </div>`;
+      projSection.appendChild(row);
+    });
+    scroll.appendChild(projSection);
+  }
+
+  // --- Archived Tasks ---
+  if (archivedTasks.length > 0) {
+    const taskSection = document.createElement('div');
+    taskSection.className = 'archive-section';
+    taskSection.innerHTML = `<div class="archive-section-title">Tasks (${archivedTasks.length})</div>`;
+
+    const allProjects = Store.allProjects();
+    archivedTasks.forEach(task => {
+      const proj = task.project ? allProjects.find(p => p.id === task.project) : null;
+      const row = document.createElement('div');
+      row.className = 'archive-row';
+      row.innerHTML = `
+        <span class="archive-task-dot ${task.category}"></span>
+        <div class="archive-row-info">
+          <span class="archive-row-name">${escHtml(task.title)}</span>
+          <span class="archive-row-meta">
+            ${task.category} · ${task.status}
+            ${proj ? `· <em>${escHtml(proj.name)}</em>` : ''}
+            ${task.taskId ? `· <code>${escHtml(task.taskId)}</code>` : ''}
+          </span>
+        </div>
+        <div class="archive-row-actions">
+          <button class="archive-btn restore" data-id="${task.id}" data-type="task">Restore</button>
+          <button class="archive-btn destroy" data-id="${task.id}" data-type="task">Delete forever</button>
+        </div>`;
+      taskSection.appendChild(row);
+    });
+    scroll.appendChild(taskSection);
+  }
+
+  // Wire buttons
+  scroll.querySelectorAll('.archive-btn.restore').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.type === 'task') {
+        const tasks = Store.allTasks().map(t => t.id === btn.dataset.id ? { ...t, archived: false } : t);
+        Store.saveTasks(tasks);
+      } else {
+        const projects = Store.allProjects().map(p => p.id === btn.dataset.id ? { ...p, archived: false } : p);
+        Store.saveProjects(projects);
+      }
+      renderArchiveView();
+      renderSidebar();
+    });
+  });
+
+  scroll.querySelectorAll('.archive-btn.destroy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('Permanently delete this item? This cannot be undone.')) return;
+      if (btn.dataset.type === 'task') {
+        Store.saveTasks(Store.allTasks().filter(t => t.id !== btn.dataset.id));
+      } else {
+        Store.saveProjects(Store.allProjects().filter(p => p.id !== btn.dataset.id));
+      }
+      renderArchiveView();
+      renderSidebar();
+    });
+  });
+}
+
 // ===== Visual Board =====
 
 function renderBoardView() {
@@ -793,11 +898,12 @@ function renderRightPanel() {
   const weekView    = document.getElementById('weekView');
   const projectView = document.getElementById('projectView');
   const boardView   = document.getElementById('boardView');
+  const archiveView = document.getElementById('archiveView');
   const titleEl     = document.querySelector('.week-panel-title');
   const datesEl     = document.querySelector('.week-panel-dates');
   const generateBtn = document.getElementById('generateNoteBtn');
 
-  [dayView, todayView, inboxView, weekView, projectView, boardView].forEach(el => el.classList.add('hidden'));
+  [dayView, todayView, inboxView, weekView, projectView, boardView, archiveView].forEach(el => el.classList.add('hidden'));
   generateBtn.classList.add('hidden');
 
   if (state.activeView === 'today') {
@@ -810,6 +916,11 @@ function renderRightPanel() {
     titleEl.textContent = 'Inbox Review';
     datesEl.textContent = 'Process and sort your captured tasks';
     renderInboxReview();
+  } else if (state.activeView === 'archive') {
+    archiveView.classList.remove('hidden');
+    titleEl.textContent = 'Archive';
+    datesEl.textContent = 'Archived projects and tasks — restore or delete permanently';
+    renderArchiveView();
   } else if (state.activeView === 'board') {
     boardView.classList.remove('hidden');
     titleEl.textContent = 'Visual Board';
@@ -1683,7 +1794,7 @@ function saveTask() {
 function deleteTask() {
   const id = document.getElementById('editTaskId').value;
   if (!id) return;
-  const tasks = Store.tasks().filter(t => t.id !== id);
+  const tasks = Store.allTasks().map(t => t.id === id ? { ...t, archived: true } : t);
   Store.saveTasks(tasks);
   closeTaskModal();
   renderAll();
@@ -1740,9 +1851,12 @@ function closeProjectModal() {
 function deleteProject() {
   const id = document.getElementById('editProjectId').value;
   if (!id) return;
-  // Unparent children instead of deleting them
-  const projects = Store.projects().map(p => p.parentId === id ? { ...p, parentId: '' } : p)
-                                   .filter(p => p.id !== id);
+  // Archive project; unparent children so they become roots
+  const projects = Store.allProjects().map(p => {
+    if (p.id === id) return { ...p, archived: true };
+    if (p.parentId === id) return { ...p, parentId: '' };
+    return p;
+  });
   Store.saveProjects(projects);
   closeProjectModal();
   if (state.selectedProjectId === id) {
