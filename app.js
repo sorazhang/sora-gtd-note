@@ -149,6 +149,7 @@ let state = {
   selectedDay: null,       // 'YYYY-MM-DD' when a specific day cell is clicked
   selectedProjectId: null, // project id when project view is active
   projectViewMode: 'list', // 'list' | 'gantt'
+  weekViewMode: 'list',    // 'list' | 'gantt'
   activeView: 'week',
   activeTab: 'all',
   editingTaskId: null,
@@ -1028,17 +1029,28 @@ function renderWeekPanel() {
   const notes = Store.weekNotes();
   document.getElementById('weekNotesTextarea').value = notes[`${y}-W${w}`] || '';
 
-  renderWeekTasks();
+  // Sync toggle button state
+  const isGantt = state.weekViewMode === 'gantt';
+  document.getElementById('weekListBtn').classList.toggle('active', !isGantt);
+  document.getElementById('weekGanttBtn').classList.toggle('active', isGantt);
+  document.getElementById('weekListView').classList.toggle('hidden', isGantt);
+  document.getElementById('weekGanttView').classList.toggle('hidden', !isGantt);
+  // Tab bar only shown in list mode
+  document.getElementById('weekTabBar').style.display = isGantt ? 'none' : '';
+
+  if (isGantt) {
+    renderWeekGantt();
+  } else {
+    renderWeekTasks();
+  }
 }
 
 function renderWeekTasks() {
   const { selectedWeek: w, selectedWeekYear: y, activeTab } = state;
   const tasks = Store.tasks().filter(t => t.week === w && t.year === y);
+  const filtered = activeTab === 'all' ? tasks : tasks.filter(t => t.category === activeTab);
 
-  const filtered = activeTab === 'all' ? tasks
-    : tasks.filter(t => t.category === activeTab);
-
-  const container = document.getElementById('weekTasksContainer');
+  const container = document.getElementById('weekListView');
   container.innerHTML = '';
 
   if (filtered.length === 0) {
@@ -1048,14 +1060,10 @@ function renderWeekTasks() {
     container.appendChild(empty);
   } else {
     const active = filtered.filter(t => t.status !== 'done');
-    const done = filtered.filter(t => t.status === 'done');
-
+    const done   = filtered.filter(t => t.status === 'done');
     if (active.length > 0) {
-      if (activeTab === 'all') {
-        renderTaskGroup(container, 'Active', active);
-      } else {
-        active.forEach(t => container.appendChild(buildTaskCard(t)));
-      }
+      if (activeTab === 'all') renderTaskGroup(container, 'Active', active);
+      else active.forEach(t => container.appendChild(buildTaskCard(t)));
     }
     if (done.length > 0) {
       const doneTitle = document.createElement('div');
@@ -1066,12 +1074,153 @@ function renderWeekTasks() {
     }
   }
 
-  // Add task button
   const addBtn = document.createElement('button');
   addBtn.className = 'task-card-add';
   addBtn.innerHTML = '<span>+</span> Add task to this week';
   addBtn.addEventListener('click', () => openTaskModal(null));
   container.appendChild(addBtn);
+}
+
+function renderWeekGantt() {
+  const { selectedWeek: w, selectedWeekYear: y } = state;
+  const { start } = weekRange(w, y);
+  const el = document.getElementById('weekGanttView');
+  el.innerHTML = '';
+
+  // Build the 7 days Mon–Sun
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    days.push({ d, key, label: d.toLocaleDateString('en-US',{weekday:'short'}), date: d.getDate() });
+  }
+
+  const allTasks = Store.tasks().filter(t => t.week === w && t.year === y);
+  const dst = allTasks.filter(t => t.day); // day-specific
+  const wst = allTasks.filter(t => !t.day); // week-level only
+
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  const LABEL_W = 150;
+  const COL_W = 80;
+  const totalW = LABEL_W + days.length * COL_W;
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'gantt-header';
+  header.style.width = totalW + 'px';
+  header.innerHTML = `<div class="gantt-label-col" style="width:${LABEL_W}px;min-width:${LABEL_W}px"></div>` +
+    days.map(({ label, date, key }) => `
+      <div class="gantt-week-col${key === todayKey ? ' gantt-current' : ''}" style="width:${COL_W}px">
+        <span class="gantt-week-num">${label}</span>
+        <span class="gantt-week-yr">${date}</span>
+      </div>`).join('');
+  el.appendChild(header);
+
+  if (allTasks.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.style.padding = '24px';
+    empty.textContent = 'No tasks for this week.';
+    el.appendChild(empty);
+    return;
+  }
+
+  // DST rows — each has a bar on its specific day
+  if (dst.length > 0) {
+    const secHeader = document.createElement('div');
+    secHeader.className = 'wgantt-section-header';
+    secHeader.style.width = totalW + 'px';
+    secHeader.textContent = `Day Tasks (${dst.length})`;
+    el.appendChild(secHeader);
+
+    dst.sort((a, b) => (a.day > b.day ? 1 : -1)).forEach(task => {
+      const row = document.createElement('div');
+      row.className = 'gantt-row';
+      row.style.width = totalW + 'px';
+      row.addEventListener('click', () => openTaskModal(task.id));
+
+      const label = buildGanttLabel(task, LABEL_W);
+      row.appendChild(label);
+
+      days.forEach(({ key }) => {
+        const cell = document.createElement('div');
+        cell.className = `gantt-cell${key === todayKey ? ' gantt-current' : ''}`;
+        cell.style.width = COL_W + 'px';
+        if (task.day === key) {
+          cell.appendChild(buildGanttBar(task));
+        }
+        row.appendChild(cell);
+      });
+      el.appendChild(row);
+    });
+  }
+
+  // WST rows — bar spans all 7 days
+  if (wst.length > 0) {
+    const secHeader = document.createElement('div');
+    secHeader.className = 'wgantt-section-header';
+    secHeader.style.width = totalW + 'px';
+    secHeader.textContent = `Week Tasks (${wst.length})`;
+    el.appendChild(secHeader);
+
+    wst.sort((a, b) => (a.priority === 'high' ? -1 : b.priority === 'high' ? 1 : 0)).forEach(task => {
+      const row = document.createElement('div');
+      row.className = 'gantt-row';
+      row.style.width = totalW + 'px';
+      row.addEventListener('click', () => openTaskModal(task.id));
+
+      const label = buildGanttLabel(task, LABEL_W);
+      row.appendChild(label);
+
+      // Single spanning cell across all 7 days
+      const spanCell = document.createElement('div');
+      spanCell.style.cssText = `display:flex;align-items:center;width:${COL_W * 7}px;padding:3px 4px;`;
+      const bar = buildGanttBar(task, true);
+      spanCell.appendChild(bar);
+      row.appendChild(spanCell);
+      el.appendChild(row);
+    });
+  }
+
+  // + Add task row
+  const addRow = document.createElement('button');
+  addRow.className = 'task-card-add';
+  addRow.style.cssText = `margin:8px 12px;width:calc(100% - 24px);`;
+  addRow.innerHTML = '<span>+</span> Add task to this week';
+  addRow.addEventListener('click', () => openTaskModal(null));
+  el.appendChild(addRow);
+}
+
+function buildGanttLabel(task, width) {
+  const label = document.createElement('div');
+  label.className = 'gantt-label-col';
+  label.style.cssText = `width:${width}px;min-width:${width}px;`;
+  label.title = task.title;
+  label.innerHTML = `
+    <span class="gantt-task-dot ${task.category}${task.status==='done'?' done':''}"></span>
+    <span class="gantt-task-name${task.status==='done'?' done':''}">${escHtml(task.title)}</span>
+    ${task.taskId ? `<span class="gantt-task-id">${escHtml(task.taskId)}</span>` : ''}`;
+  return label;
+}
+
+function buildGanttBar(task, spanning = false) {
+  const progress = task.progress || 0;
+  const effort = task.effort;
+  const barClass = task.status === 'done' ? 'done' : task.category === 'work' ? 'work' : 'personal';
+  const effortLabel = effort && effort !== 'TBD' ? effort : '';
+  const remain = calcRemainEffort(effort, progress);
+  const bar = document.createElement('div');
+  bar.className = `gantt-bar ${barClass}${spanning ? ' gantt-bar-span' : ''}`;
+  bar.title = `${task.title}${effortLabel ? ' · '+effortLabel : ''}${progress ? ' · '+progress+'%' : ''}${remain ? ' · '+remain+' left' : ''}`;
+  if (progress > 0 && progress < 100) {
+    bar.innerHTML = `<div class="gantt-bar-done" style="width:${progress}%"></div><span class="gantt-bar-label">${spanning ? task.title.slice(0,22) + (task.title.length>22?'…':'') + (effortLabel?' · '+effortLabel:'') : progress+'%'}</span>`;
+  } else {
+    bar.textContent = spanning ? (task.title.slice(0,28) + (task.title.length>28?'…':'')) + (effortLabel?' · '+effortLabel:'') : effortLabel;
+  }
+  return bar;
 }
 
 function renderTaskGroup(container, title, tasks) {
@@ -1531,6 +1680,14 @@ function bindEvents() {
       state.activeTab = tab.dataset.tab;
       renderWeekTasks();
     });
+  });
+
+  // Week List/Gantt toggle
+  document.getElementById('weekListBtn').addEventListener('click', () => {
+    state.weekViewMode = 'list'; renderWeekPanel();
+  });
+  document.getElementById('weekGanttBtn').addEventListener('click', () => {
+    state.weekViewMode = 'gantt'; renderWeekPanel();
   });
 
   // Week notes

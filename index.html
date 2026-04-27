@@ -110,16 +110,6 @@
 
         <!-- Week View -->
         <div id="weekView">
-          <div class="tab-bar">
-            <button class="tab active" data-tab="all">All</button>
-            <button class="tab personal" data-tab="personal">Personal</button>
-            <button class="tab work" data-tab="work">Work</button>
-          </div>
-
-          <div class="week-tasks-container" id="weekTasksContainer">
-            <div class="empty-state">Select a week from the calendar</div>
-          </div>
-
           <div class="week-notes-section">
             <div class="week-notes-header">
               <span>Week Notes</span>
@@ -128,6 +118,24 @@
             <textarea class="week-notes-textarea" id="weekNotesTextarea"
               placeholder="Reflections, blockers, learnings…"></textarea>
           </div>
+
+          <div class="week-view-toolbar">
+            <div class="tab-bar" id="weekTabBar">
+              <button class="tab active" data-tab="all">All</button>
+              <button class="tab personal" data-tab="personal">Personal</button>
+              <button class="tab work" data-tab="work">Work</button>
+            </div>
+            <div class="proj-view-toggle">
+              <button class="proj-toggle-btn active" id="weekListBtn">List</button>
+              <button class="proj-toggle-btn" id="weekGanttBtn">Gantt</button>
+            </div>
+          </div>
+
+          <div id="weekListView" class="week-tasks-container" id="weekTasksContainer">
+            <div class="empty-state">Select a week from the calendar</div>
+          </div>
+
+          <div id="weekGanttView" class="hidden"></div>
         </div>
       </aside>
     </div>

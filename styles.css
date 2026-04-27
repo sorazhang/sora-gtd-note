@@ -702,9 +702,48 @@ body {
 
 /* Week Notes */
 .week-notes-section {
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   padding: 12px;
   flex-shrink: 0;
+}
+
+/* Week view toolbar (tab bar + list/gantt toggle) */
+.week-view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.week-view-toolbar .tab-bar {
+  border-bottom: none;
+  flex: 1;
+}
+#weekGanttView {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+/* Week Gantt section headers */
+.wgantt-section-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+  padding: 8px 12px 4px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  left: 0;
+}
+
+/* Spanning gantt bar (WST) */
+.gantt-bar-span {
+  width: calc(100% - 8px) !important;
+  opacity: 0.85;
 }
 
 .week-notes-header {
