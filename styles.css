@@ -1649,6 +1649,35 @@ body {
   margin-top: 4px;
 }
 
+.proj-week-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px 4px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.proj-week-header:first-child { border-top: none; margin-top: 0; }
+.proj-week-header.done-header { margin-top: 8px; }
+
+.proj-week-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.proj-week-label.current { color: var(--accent); }
+
+.proj-week-count {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--border);
+  color: var(--text-3);
+  border-radius: 8px;
+  padding: 1px 6px;
+}
+
 /* ===== Task ID & Effort ===== */
 .task-id-input {
   background: var(--bg);

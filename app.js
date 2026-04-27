@@ -373,21 +373,6 @@ function renderProjectView() {
   const active = linked.filter(t => t.status !== 'done');
   const done   = linked.filter(t => t.status === 'done');
 
-  const STATUS_LABEL = { inbox:'Inbox', next:'Next Action', waiting:'Waiting For', someday:'Someday', done:'Done' };
-  const PRIORITY_DOT = { high:'🔴', medium:'🟡', low:'🟢' };
-
-  function taskRow(t) {
-    return `
-      <div class="proj-task-row" data-id="${t.id}">
-        <span class="proj-task-check ${t.status === 'done' ? 'done' : ''}">${t.status === 'done' ? '✓' : '○'}</span>
-        <span class="proj-task-title ${t.status === 'done' ? 'done' : ''}">${escHtml(t.title)}</span>
-        <span class="proj-task-meta">
-          ${PRIORITY_DOT[t.priority] || ''} <span class="proj-task-status ${t.category}">${STATUS_LABEL[t.status] || t.status}</span>
-          ${t.week ? `<span class="proj-task-week">W${t.week}</span>` : ''}
-        </span>
-      </div>`;
-  }
-
   el.innerHTML = `
     <div class="proj-notes-section">
       <div class="proj-notes-header">
@@ -402,25 +387,62 @@ function renderProjectView() {
         <span>Tasks <span class="proj-task-count">${linked.length}</span></span>
         <button class="btn-add-task-proj" id="projAddTaskBtn">+ Task</button>
       </div>
-      <div class="proj-tasks-scroll">
-        ${active.length === 0 && done.length === 0
-          ? '<div class="empty-state" style="padding:24px">No tasks linked to this project yet.</div>'
-          : ''}
-        ${active.map(taskRow).join('')}
-        ${done.length > 0 ? `
-          <div class="proj-done-divider">Completed (${done.length})</div>
-          ${done.map(taskRow).join('')}
-        ` : ''}
-      </div>
+      <div class="proj-tasks-scroll" id="projTasksScroll"></div>
     </div>
   `;
+
+  const scroll = el.querySelector('#projTasksScroll');
+
+  if (linked.length === 0) {
+    scroll.innerHTML = '<div class="empty-state" style="padding:24px">No tasks linked to this project yet.</div>';
+  } else {
+    // Group active tasks by week
+    const weekMap = new Map();
+    active.forEach(t => {
+      const key = t.week && t.year ? `${t.year}-W${String(t.week).padStart(2,'0')}` : 'no-week';
+      if (!weekMap.has(key)) weekMap.set(key, { week: t.week, year: t.year, tasks: [] });
+      weekMap.get(key).tasks.push(t);
+    });
+
+    // Sort weeks ascending (no-week at end)
+    const sorted = [...weekMap.entries()].sort(([a], [b]) => {
+      if (a === 'no-week') return 1;
+      if (b === 'no-week') return -1;
+      return a < b ? -1 : 1;
+    });
+
+    const now = new Date();
+    const currentWeek = isoWeek(now);
+    const currentYear = isoWeekYear(now);
+
+    sorted.forEach(([, { week, year, tasks: weekTasks }]) => {
+      const header = document.createElement('div');
+      header.className = 'proj-week-header';
+      if (week && year) {
+        const { start, end } = weekRange(week, year);
+        const isCurrent = week === currentWeek && year === currentYear;
+        header.innerHTML = `
+          <span class="proj-week-label${isCurrent ? ' current' : ''}">W${week} · ${formatDateShort(start)}–${formatDateShort(end)}</span>
+          <span class="proj-week-count">${weekTasks.length}</span>`;
+      } else {
+        header.innerHTML = `<span class="proj-week-label">No week assigned</span>`;
+      }
+      scroll.appendChild(header);
+      weekTasks.forEach(t => scroll.appendChild(buildTaskCard(t)));
+    });
+
+    if (done.length > 0) {
+      const doneHeader = document.createElement('div');
+      doneHeader.className = 'proj-week-header done-header';
+      doneHeader.innerHTML = `<span class="proj-week-label">Completed</span><span class="proj-week-count">${done.length}</span>`;
+      scroll.appendChild(doneHeader);
+      done.forEach(t => scroll.appendChild(buildTaskCard(t)));
+    }
+  }
 
   document.getElementById('projNotesSaveBtn').addEventListener('click', saveProjectNotes);
   document.getElementById('projAddTaskBtn').addEventListener('click', () => {
     openTaskModal(null, { project: proj.id });
-  });
-  el.querySelectorAll('.proj-task-row').forEach(row => {
-    row.addEventListener('click', () => openTaskModal(row.dataset.id));
   });
 }
 
