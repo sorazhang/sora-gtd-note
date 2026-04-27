@@ -1692,6 +1692,7 @@ function renderWeekKanban() {
           <div class="kanban-task-title">${escHtml(t.title)}</div>
           ${proj ? `<div class="kanban-task-meta"><span class="kanban-proj-dot ${proj.type}"></span>${escHtml(proj.name)}</div>` : ''}
           <div class="kanban-task-footer">
+            ${t.execStatus ? `<span class="exec-status-badge es-${t.execStatus}">${t.execStatus === 'wip' ? 'WIP' : t.execStatus.charAt(0).toUpperCase() + t.execStatus.slice(1)}</span>` : ''}
             ${t.effort && t.effort !== 'TBD' ? `<span class="kanban-chip">${t.effort}</span>` : ''}
             ${t.delegated ? `<span class="kanban-chip delegated">⇢ ${escHtml(t.delegated)}</span>` : ''}
             ${t.context ? `<span class="kanban-chip ctx">${escHtml(t.context)}</span>` : ''}
@@ -1899,6 +1900,13 @@ function buildTaskCard(task) {
   priorityTag.textContent = task.priority;
   meta.appendChild(priorityTag);
 
+  if (task.execStatus) {
+    const esTag = document.createElement('span');
+    esTag.className = `exec-status-badge es-${task.execStatus}`;
+    esTag.textContent = task.execStatus === 'wip' ? 'WIP' : task.execStatus.charAt(0).toUpperCase() + task.execStatus.slice(1);
+    meta.appendChild(esTag);
+  }
+
   if (task.status !== 'done' && task.status !== 'next') {
     const statusTag = document.createElement('span');
     statusTag.className = 'task-tag status';
@@ -2014,6 +2022,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskWeek').value = task.week || '';
     document.getElementById('fTaskYear').value = task.year || '';
     document.getElementById('fTaskDay').value = task.day || '';
+    document.getElementById('fTaskExecStatus').value = task.execStatus || '';
     document.getElementById('fTaskDelegated').value = task.delegated || '';
     document.getElementById('fTaskContext').value = task.context || '';
     document.getElementById('fTaskNotes').value = task.notes || '';
@@ -2031,6 +2040,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskWeek').value = state.selectedWeek || isoWeek(new Date());
     document.getElementById('fTaskYear').value = state.selectedWeekYear || isoWeekYear(new Date());
     document.getElementById('fTaskDay').value = prefillDay || state.selectedDay || '';
+    document.getElementById('fTaskExecStatus').value = '';
     document.getElementById('fTaskDelegated').value = '';
     document.getElementById('fTaskContext').value = '';
     document.getElementById('fTaskNotes').value = '';
@@ -2080,6 +2090,7 @@ function saveTask() {
     week: parseInt(document.getElementById('fTaskWeek').value) || isoWeek(new Date()),
     year: parseInt(document.getElementById('fTaskYear').value) || isoWeekYear(new Date()),
     day: rawDay || null,
+    execStatus: document.getElementById('fTaskExecStatus').value,
     delegated: document.getElementById('fTaskDelegated').value.trim(),
     context: document.getElementById('fTaskContext').value.trim(),
     notes: document.getElementById('fTaskNotes').value.trim(),

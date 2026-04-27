@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GTD Note System</title>
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <div class="app-container">
@@ -233,6 +233,17 @@
             </select>
           </div>
           <div class="form-group">
+            <label class="form-label">Status</label>
+            <select id="fTaskExecStatus" class="form-select">
+              <option value="">— No status —</option>
+              <option value="todo">Todo</option>
+              <option value="wip">WIP</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
             <label class="form-label">Project</label>
             <select id="fTaskProject" class="form-select">
               <option value="">No Project</option>
@@ -355,6 +366,6 @@
   <!-- Focus Mode Overlay -->
   <div id="focusModeOverlay" class="hidden"></div>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
