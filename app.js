@@ -1594,16 +1594,20 @@ function renderWeekPanel() {
   document.getElementById('weekNotesTextarea').value = notes[`${y}-W${w}`] || '';
 
   // Sync toggle button state
-  const isGantt = state.weekViewMode === 'gantt';
-  document.getElementById('weekListBtn').classList.toggle('active', !isGantt);
-  document.getElementById('weekGanttBtn').classList.toggle('active', isGantt);
-  document.getElementById('weekListView').classList.toggle('hidden', isGantt);
-  document.getElementById('weekGanttView').classList.toggle('hidden', !isGantt);
-  // Tab bar only shown in list mode
-  document.getElementById('weekTabBar').style.display = isGantt ? 'none' : '';
+  const mode = state.weekViewMode;
+  document.getElementById('weekListBtn').classList.toggle('active',   mode === 'list');
+  document.getElementById('weekKanbanBtn').classList.toggle('active', mode === 'kanban');
+  document.getElementById('weekGanttBtn').classList.toggle('active',  mode === 'gantt');
+  document.getElementById('weekListView').classList.toggle('hidden',   mode !== 'list');
+  document.getElementById('weekKanbanView').classList.toggle('hidden', mode !== 'kanban');
+  document.getElementById('weekGanttView').classList.toggle('hidden',  mode !== 'gantt');
+  // Tab bar hidden in Gantt mode only
+  document.getElementById('weekTabBar').style.display = mode === 'gantt' ? 'none' : '';
 
-  if (isGantt) {
+  if (mode === 'gantt') {
     renderWeekGantt();
+  } else if (mode === 'kanban') {
+    renderWeekKanban();
   } else {
     renderWeekTasks();
   }
@@ -1643,6 +1647,68 @@ function renderWeekTasks() {
   addBtn.innerHTML = '<span>+</span> Add task to this week';
   addBtn.addEventListener('click', () => openTaskModal(null));
   container.appendChild(addBtn);
+}
+
+function renderWeekKanban() {
+  const { selectedWeek: w, selectedWeekYear: y, activeTab } = state;
+  const tasks = Store.tasks().filter(t => t.week === w && t.year === y);
+  const filtered = activeTab === 'all' ? tasks : tasks.filter(t => t.category === activeTab);
+  const projects = Store.projects();
+
+  const el = document.getElementById('weekKanbanView');
+
+  const COLS = [
+    { id: 'inbox',   label: 'Inbox',       icon: '⬇', accent: '#6366f1' },
+    { id: 'next',    label: 'Next Action',  icon: '⚡', accent: '#10b981' },
+    { id: 'waiting', label: 'Waiting For',  icon: '⏳', accent: '#f59e0b' },
+    { id: 'someday', label: 'Someday',      icon: '💭', accent: '#8b5cf6' },
+    { id: 'done',    label: 'Done',         icon: '✓',  accent: '#64748b' },
+  ];
+
+  el.innerHTML = `<div class="week-kanban">${COLS.map(col => {
+    const colTasks = filtered.filter(t => t.status === col.id);
+    return `
+      <div class="kanban-col" data-status="${col.id}">
+        <div class="kanban-col-header" style="border-top:3px solid ${col.accent}">
+          <span class="kanban-col-title">${col.icon} ${col.label}</span>
+          <span class="kanban-col-count" style="background:${col.accent}22;color:${col.accent}">${colTasks.length}</span>
+        </div>
+        <div class="kanban-col-body" id="kcol-${col.id}"></div>
+        <button class="kanban-add-btn" data-status="${col.id}">+ Add</button>
+      </div>`;
+  }).join('')}</div>`;
+
+  COLS.forEach(col => {
+    const colTasks = filtered.filter(t => t.status === col.id);
+    const body = el.querySelector(`#kcol-${col.id}`);
+    if (colTasks.length === 0) {
+      body.innerHTML = `<div class="kanban-empty">No tasks</div>`;
+    } else {
+      colTasks.forEach(t => {
+        const proj = t.project ? projects.find(p => p.id === t.project) : null;
+        const card = document.createElement('div');
+        card.className = `kanban-task-card priority-${t.priority}`;
+        card.innerHTML = `
+          <div class="kanban-task-title">${escHtml(t.title)}</div>
+          ${proj ? `<div class="kanban-task-meta"><span class="kanban-proj-dot ${proj.type}"></span>${escHtml(proj.name)}</div>` : ''}
+          <div class="kanban-task-footer">
+            ${t.effort && t.effort !== 'TBD' ? `<span class="kanban-chip">${t.effort}</span>` : ''}
+            ${t.delegated ? `<span class="kanban-chip delegated">⇢ ${escHtml(t.delegated)}</span>` : ''}
+            ${t.context ? `<span class="kanban-chip ctx">${escHtml(t.context)}</span>` : ''}
+            ${t.progress > 0 ? `<span class="kanban-chip progress">${t.progress}%</span>` : ''}
+          </div>`;
+        card.addEventListener('click', () => openTaskModal(t.id));
+        body.appendChild(card);
+      });
+    }
+  });
+
+  el.querySelectorAll('.kanban-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openTaskModal(null);
+      setTimeout(() => { document.getElementById('fTaskStatus').value = btn.dataset.status; }, 0);
+    });
+  });
 }
 
 function renderWeekGantt() {
@@ -2420,9 +2486,12 @@ function bindEvents() {
     });
   });
 
-  // Week List/Gantt toggle
+  // Week List / Kanban / Gantt toggle
   document.getElementById('weekListBtn').addEventListener('click', () => {
     state.weekViewMode = 'list'; renderWeekPanel();
+  });
+  document.getElementById('weekKanbanBtn').addEventListener('click', () => {
+    state.weekViewMode = 'kanban'; renderWeekPanel();
   });
   document.getElementById('weekGanttBtn').addEventListener('click', () => {
     state.weekViewMode = 'gantt'; renderWeekPanel();
