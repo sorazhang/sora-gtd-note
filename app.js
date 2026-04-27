@@ -1658,29 +1658,28 @@ function renderWeekKanban() {
   const el = document.getElementById('weekKanbanView');
 
   const COLS = [
-    { id: 'inbox',   label: 'Inbox',       icon: '⬇', accent: '#6366f1' },
-    { id: 'next',    label: 'Next Action',  icon: '⚡', accent: '#10b981' },
-    { id: 'waiting', label: 'Waiting For',  icon: '⏳', accent: '#f59e0b' },
-    { id: 'someday', label: 'Someday',      icon: '💭', accent: '#8b5cf6' },
-    { id: 'done',    label: 'Done',         icon: '✓',  accent: '#64748b' },
+    { id: '',     label: 'No Status', icon: '·',  accent: '#94a3b8' },
+    { id: 'todo', label: 'Todo',      icon: '○',  accent: '#3b82f6' },
+    { id: 'wip',  label: 'WIP',       icon: '▶',  accent: '#f59e0b' },
+    { id: 'done', label: 'Done',      icon: '✓',  accent: '#10b981' },
   ];
 
   el.innerHTML = `<div class="week-kanban">${COLS.map(col => {
-    const colTasks = filtered.filter(t => t.status === col.id);
+    const colTasks = filtered.filter(t => (t.execStatus || '') === col.id);
     return `
-      <div class="kanban-col" data-status="${col.id}">
+      <div class="kanban-col" data-execstatus="${col.id}">
         <div class="kanban-col-header" style="border-top:3px solid ${col.accent}">
           <span class="kanban-col-title">${col.icon} ${col.label}</span>
           <span class="kanban-col-count" style="background:${col.accent}22;color:${col.accent}">${colTasks.length}</span>
         </div>
-        <div class="kanban-col-body" id="kcol-${col.id}"></div>
-        <button class="kanban-add-btn" data-status="${col.id}">+ Add</button>
+        <div class="kanban-col-body" id="kcol-${col.id || 'none'}"></div>
+        <button class="kanban-add-btn" data-execstatus="${col.id}">+ Add</button>
       </div>`;
   }).join('')}</div>`;
 
   COLS.forEach(col => {
-    const colTasks = filtered.filter(t => t.status === col.id);
-    const body = el.querySelector(`#kcol-${col.id}`);
+    const colTasks = filtered.filter(t => (t.execStatus || '') === col.id);
+    const body = el.querySelector(`#kcol-${col.id || 'none'}`);
     if (colTasks.length === 0) {
       body.innerHTML = `<div class="kanban-empty">No tasks</div>`;
     } else {
@@ -1692,7 +1691,6 @@ function renderWeekKanban() {
           <div class="kanban-task-title">${escHtml(t.title)}</div>
           ${proj ? `<div class="kanban-task-meta"><span class="kanban-proj-dot ${proj.type}"></span>${escHtml(proj.name)}</div>` : ''}
           <div class="kanban-task-footer">
-            ${t.execStatus ? `<span class="exec-status-badge es-${t.execStatus}">${t.execStatus === 'wip' ? 'WIP' : t.execStatus.charAt(0).toUpperCase() + t.execStatus.slice(1)}</span>` : ''}
             ${t.effort && t.effort !== 'TBD' ? `<span class="kanban-chip">${t.effort}</span>` : ''}
             ${t.delegated ? `<span class="kanban-chip delegated">⇢ ${escHtml(t.delegated)}</span>` : ''}
             ${t.context ? `<span class="kanban-chip ctx">${escHtml(t.context)}</span>` : ''}
@@ -1707,7 +1705,7 @@ function renderWeekKanban() {
   el.querySelectorAll('.kanban-add-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       openTaskModal(null);
-      setTimeout(() => { document.getElementById('fTaskStatus').value = btn.dataset.status; }, 0);
+      setTimeout(() => { document.getElementById('fTaskExecStatus').value = btn.dataset.execstatus; }, 0);
     });
   });
 }
