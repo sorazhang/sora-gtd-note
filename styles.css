@@ -1649,6 +1649,33 @@ body {
   margin-top: 4px;
 }
 
+/* ===== Task ID & Effort ===== */
+.task-id-input {
+  background: var(--bg);
+  color: var(--accent);
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: default;
+}
+.task-id-input:focus { outline: none; border-color: var(--border); }
+
+.effort-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  white-space: nowrap;
+}
+.effort-badge.tbd  { color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; }
+.effort-badge.min10 { color: #059669; border-color: #a7f3d0; background: #ecfdf5; }
+.effort-badge.min20 { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+.effort-badge.min60 { color: #d97706; border-color: #fde68a; background: #fffbeb; }
+
 /* ===== Responsive ===== */
 @media (max-width: 1100px) {
   :root {

@@ -4,6 +4,19 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+function generateTaskId(projectId) {
+  const projects = Store.projects();
+  const tasks = Store.tasks();
+  const proj = projects.find(p => p.id === projectId);
+  const prefix = proj
+    ? proj.name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'TSK'
+    : 'TSK';
+  const existing = tasks.filter(t => t.taskId && t.taskId.startsWith(prefix + '-'));
+  const nums = existing.map(t => parseInt(t.taskId.split('-').pop(), 10)).filter(n => !isNaN(n));
+  const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+  return `${prefix}-${String(next).padStart(3, '0')}`;
+}
+
 function isoWeek(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -998,6 +1011,22 @@ function buildTaskCard(task) {
     meta.appendChild(dayTag);
   }
 
+  if (task.effort && task.effort !== 'TBD') {
+    const effortTag = document.createElement('span');
+    const cls = task.effort === '10min' ? 'min10' : task.effort === '20min' ? 'min20' : 'min60';
+    effortTag.className = `effort-badge ${cls}`;
+    effortTag.textContent = task.effort;
+    meta.appendChild(effortTag);
+  }
+
+  if (task.taskId) {
+    const idTag = document.createElement('span');
+    idTag.className = 'effort-badge tbd';
+    idTag.style.fontFamily = 'monospace';
+    idTag.textContent = task.taskId;
+    meta.appendChild(idTag);
+  }
+
   body.appendChild(titleEl);
   body.appendChild(meta);
   card.appendChild(checkEl);
@@ -1034,17 +1063,21 @@ function openTaskModal(taskId, defaults = null) {
 
   populateProjectDropdown('fTaskProject');
 
+  const projSelect = document.getElementById('fTaskProject');
+
   if (taskId) {
     const task = Store.tasks().find(t => t.id === taskId);
     if (!task) return;
     titleEl.textContent = 'Edit Task';
     deleteBtn.classList.remove('hidden');
     document.getElementById('editTaskId').value = task.id;
+    document.getElementById('fTaskId').value = task.taskId || '';
     document.getElementById('fTaskTitle').value = task.title;
     document.getElementById('fTaskCategory').value = task.category;
     document.getElementById('fTaskPriority').value = task.priority;
     document.getElementById('fTaskStatus').value = task.status;
-    document.getElementById('fTaskProject').value = task.project || '';
+    document.getElementById('fTaskEffort').value = task.effort || 'TBD';
+    projSelect.value = task.project || '';
     document.getElementById('fTaskWeek').value = task.week || '';
     document.getElementById('fTaskYear').value = task.year || '';
     document.getElementById('fTaskDay').value = task.day || '';
@@ -1058,13 +1091,20 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskCategory').value = 'work';
     document.getElementById('fTaskPriority').value = 'medium';
     document.getElementById('fTaskStatus').value = 'next';
-    document.getElementById('fTaskProject').value = (defaults && defaults.project) || '';
+    document.getElementById('fTaskEffort').value = 'TBD';
+    projSelect.value = (defaults && defaults.project) || '';
     document.getElementById('fTaskWeek').value = state.selectedWeek || isoWeek(new Date());
     document.getElementById('fTaskYear').value = state.selectedWeekYear || isoWeekYear(new Date());
     document.getElementById('fTaskDay').value = prefillDay || state.selectedDay || '';
     document.getElementById('fTaskContext').value = '';
     document.getElementById('fTaskNotes').value = '';
+    document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   }
+
+  // Regenerate preview ID when project changes (new tasks only)
+  projSelect.onchange = () => {
+    if (!taskId) document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
+  };
 
   modal.classList.remove('hidden');
   document.getElementById('fTaskTitle').focus();
@@ -1083,12 +1123,14 @@ function saveTask() {
   const tasks = Store.tasks();
 
   const rawDay = document.getElementById('fTaskDay').value;
+  const projectVal = document.getElementById('fTaskProject').value;
   const taskData = {
     title,
     category: document.getElementById('fTaskCategory').value,
     priority: document.getElementById('fTaskPriority').value,
     status: document.getElementById('fTaskStatus').value,
-    project: document.getElementById('fTaskProject').value,
+    effort: document.getElementById('fTaskEffort').value,
+    project: projectVal,
     week: parseInt(document.getElementById('fTaskWeek').value) || isoWeek(new Date()),
     year: parseInt(document.getElementById('fTaskYear').value) || isoWeekYear(new Date()),
     day: rawDay || null,
@@ -1102,7 +1144,8 @@ function saveTask() {
       tasks[idx] = { ...tasks[idx], ...taskData };
     }
   } else {
-    tasks.push({ id: uid(), ...taskData, completedAt: null, createdAt: new Date().toISOString() });
+    const taskId = document.getElementById('fTaskId').value || generateTaskId(projectVal);
+    tasks.push({ id: uid(), taskId, ...taskData, completedAt: null, createdAt: new Date().toISOString() });
   }
 
   Store.saveTasks(tasks);
