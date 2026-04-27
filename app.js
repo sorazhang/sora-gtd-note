@@ -1195,16 +1195,19 @@ function renderDayView() {
   const { selectedDay: dk, selectedWeek: w, selectedWeekYear: y } = state;
   const tasks    = Store.tasks();
   const notes    = Store.weekNotes();
-  const dayKey   = dk;  // e.g. "2026-04-27"
+  const dayKey   = dk;
 
   const d = new Date(dk + 'T00:00:00');
   const dayLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-  // Day-pinned tasks (t.day === dk)
-  const pinned     = tasks.filter(t => t.day === dk && t.status !== 'done');
-  const pinnedDone = tasks.filter(t => t.day === dk && t.status === 'done');
+  // Day-pinned tasks sorted by dayOrder
+  const allPinned = tasks
+    .filter(t => t.day === dk)
+    .sort((a, b) => (a.dayOrder ?? 999) - (b.dayOrder ?? 999));
+  const pinned     = allPinned.filter(t => t.status !== 'done');
+  const pinnedDone = allPinned.filter(t => t.status === 'done');
 
-  // Week tasks with no specific day (context)
+  // Week tasks with no specific day
   const weekActive = tasks.filter(t => t.week === w && t.year === y && !t.day && t.status !== 'done');
   const weekDone   = tasks.filter(t => t.week === w && t.year === y && !t.day && t.status === 'done');
 
@@ -1220,7 +1223,7 @@ function renderDayView() {
     <div class="day-tasks-scroll">
       <div>
         <div class="day-section-head">
-          <span>📌 Day tasks <span class="day-pinned-chip">${pinned.length + pinnedDone.length}</span></span>
+          <span>📌 Day tasks <span class="day-pinned-chip">${allPinned.length}</span></span>
           <button class="today-action-link" id="addPinnedBtn">+ Add</button>
         </div>
         <div id="dayPinnedList" style="margin-top:6px"></div>
@@ -1237,10 +1240,15 @@ function renderDayView() {
   const pinnedList = el.querySelector('#dayPinnedList');
   const weekList   = el.querySelector('#dayWeekList');
 
-  if (pinned.length + pinnedDone.length === 0) {
+  if (allPinned.length === 0) {
     pinnedList.innerHTML = '<div class="today-empty">No tasks pinned to this day — use "+ Add" or set a Specific Day in any task</div>';
+  } else {
+    // Render active tasks with sequence controls, then done tasks
+    const currentId = pinned.length > 0 ? pinned[0].id : null;
+    [...pinned, ...pinnedDone].forEach((t, idx) => {
+      pinnedList.appendChild(buildDayPinnedCard(t, idx, allPinned, t.id === currentId));
+    });
   }
-  [...pinned, ...pinnedDone].forEach(t => pinnedList.appendChild(buildTaskCard(t)));
 
   if (weekActive.length + weekDone.length === 0) {
     weekList.innerHTML = '<div class="today-empty">No week tasks yet</div>';
@@ -1250,6 +1258,86 @@ function renderDayView() {
   el.querySelector('#dayNotesSaveBtn').addEventListener('click', saveDayNotes);
   el.querySelector('#addPinnedBtn').addEventListener('click', () => openTaskModal(null, dk));
   el.querySelector('#addWeekBtn').addEventListener('click', () => openTaskModal(null, null));
+}
+
+function buildDayPinnedCard(task, idx, allPinned, isCurrent) {
+  const projects = Store.projects();
+  const proj = task.project ? projects.find(p => p.id === task.project) : null;
+  const isDone = task.status === 'done';
+  const seqNum = idx + 1;
+
+  const wrap = document.createElement('div');
+  wrap.className = `day-seq-card${isDone ? ' done-card' : ''}${isCurrent ? ' day-seq-current' : ''}`;
+
+  wrap.innerHTML = `
+    <div class="day-seq-controls">
+      <button class="day-seq-btn up" title="Move up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+      <span class="day-seq-num">${isDone ? '✓' : `#${seqNum}`}</span>
+      <button class="day-seq-btn dn" title="Move down" ${idx === allPinned.length - 1 ? 'disabled' : ''}>↓</button>
+    </div>
+    <div class="day-seq-body">
+      ${isCurrent ? '<span class="day-seq-oncurrent">▶ On deck</span>' : ''}
+      <div class="day-seq-title${isDone ? ' done-text' : ''}">${escHtml(task.title)}</div>
+      <div class="day-seq-meta">
+        ${proj ? `<span class="task-tag status">${escHtml(proj.name)}</span>` : ''}
+        ${task.execStatus ? `<span class="exec-status-badge es-${task.execStatus}">${task.execStatus === 'wip' ? 'WIP' : task.execStatus.charAt(0).toUpperCase() + task.execStatus.slice(1)}</span>` : ''}
+        ${task.effort && task.effort !== 'TBD' ? `<span class="effort-badge">${task.effort}</span>` : ''}
+        ${task.delegated ? `<span class="task-tag context">⇢ ${escHtml(task.delegated)}</span>` : ''}
+      </div>
+    </div>
+    <div class="day-seq-check${isDone ? ' checked' : ''}"></div>`;
+
+  // Check / uncheck
+  wrap.querySelector('.day-seq-check').addEventListener('click', e => {
+    e.stopPropagation();
+    toggleTaskDone(task.id);
+  });
+
+  // Edit on body click
+  wrap.querySelector('.day-seq-body').addEventListener('click', () => openTaskModal(task.id));
+
+  // Reorder up
+  const upBtn = wrap.querySelector('.day-seq-btn.up');
+  if (upBtn && !upBtn.disabled) {
+    upBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      reorderDayTask(task.id, dk, -1);
+    });
+  }
+
+  // Reorder down
+  const dnBtn = wrap.querySelector('.day-seq-btn.dn');
+  if (dnBtn && !dnBtn.disabled) {
+    dnBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      reorderDayTask(task.id, dk, +1);
+    });
+  }
+
+  return wrap;
+}
+
+function reorderDayTask(taskId, dk, dir) {
+  const allTasks = Store.allTasks();
+  // Get day tasks sorted by current dayOrder
+  let dayTasks = allTasks
+    .filter(t => t.day === dk && !t.archived)
+    .sort((a, b) => (a.dayOrder ?? 999) - (b.dayOrder ?? 999));
+
+  const idx = dayTasks.findIndex(t => t.id === taskId);
+  const swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= dayTasks.length) return;
+
+  // Swap positions
+  [dayTasks[idx].dayOrder, dayTasks[swapIdx].dayOrder] = [swapIdx, idx];
+
+  // Write back updated dayOrder values
+  const updated = allTasks.map(t => {
+    const dt = dayTasks.find(d => d.id === t.id);
+    return dt ? { ...t, dayOrder: dt.dayOrder } : t;
+  });
+  Store.saveTasks(updated);
+  renderDayView();
 }
 
 // ===== Today's Focus =====
@@ -2101,7 +2189,11 @@ function saveTask() {
     }
   } else {
     const taskId = document.getElementById('fTaskId').value || generateTaskId(projectVal);
-    tasks.push({ id: uid(), taskId, ...taskData, completedAt: null, createdAt: new Date().toISOString() });
+    // Assign dayOrder at the end of the day's sequence when pinned to a specific day
+    const dayOrder = taskData.day
+      ? Store.allTasks().filter(t => t.day === taskData.day && !t.archived).length
+      : undefined;
+    tasks.push({ id: uid(), taskId, ...taskData, ...(dayOrder !== undefined ? { dayOrder } : {}), completedAt: null, createdAt: new Date().toISOString() });
   }
 
   Store.saveTasks(tasks);

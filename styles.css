@@ -1200,6 +1200,109 @@ body {
   border-bottom: 1px solid var(--border-light);
 }
 
+/* ===== Day sequence cards ===== */
+.day-seq-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  transition: box-shadow .15s;
+}
+.day-seq-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+.day-seq-card.day-seq-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99,102,241,.12);
+}
+.day-seq-card.done-card { opacity: .55; }
+
+.day-seq-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+  gap: 2px;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  min-width: 28px;
+}
+.day-seq-num {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.day-seq-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 1px 3px;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color .12s, background .12s;
+}
+.day-seq-btn:hover:not(:disabled) { color: var(--accent); background: var(--hover); }
+.day-seq-btn:disabled { opacity: .25; cursor: default; }
+
+.day-seq-body {
+  flex: 1;
+  padding: 7px 10px;
+  cursor: pointer;
+  min-width: 0;
+}
+.day-seq-oncurrent {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 3px;
+  letter-spacing: .02em;
+}
+.day-seq-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+.day-seq-title.done-text { text-decoration: line-through; color: var(--text-3); }
+.day-seq-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.day-seq-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  margin: auto 10px auto 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, border-color .15s;
+  position: relative;
+}
+.day-seq-check:hover { border-color: var(--accent); }
+.day-seq-check.checked { background: var(--accent); border-color: var(--accent); }
+.day-seq-check.checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #fff;
+  font-weight: 700;
+}
+
 .day-pinned-chip {
   display: inline-block;
   font-size: 10px;
