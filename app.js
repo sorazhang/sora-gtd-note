@@ -1701,16 +1701,24 @@ function bindEvents() {
   document.getElementById('taskModalCancel').addEventListener('click', closeTaskModal);
   document.getElementById('taskModalSave').addEventListener('click', saveTask);
   document.getElementById('deleteTaskBtn').addEventListener('click', deleteTask);
+  let taskOverlayMousedownOnBg = false;
+  document.getElementById('taskModalOverlay').addEventListener('mousedown', e => {
+    taskOverlayMousedownOnBg = e.target === e.currentTarget;
+  });
   document.getElementById('taskModalOverlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeTaskModal();
+    if (e.target === e.currentTarget && taskOverlayMousedownOnBg) closeTaskModal();
   });
 
   // Project modal
   document.getElementById('projectModalClose').addEventListener('click', closeProjectModal);
   document.getElementById('projectModalCancel').addEventListener('click', closeProjectModal);
   document.getElementById('projectModalSave').addEventListener('click', saveProject);
+  let projectOverlayMousedownOnBg = false;
+  document.getElementById('projectModalOverlay').addEventListener('mousedown', e => {
+    projectOverlayMousedownOnBg = e.target === e.currentTarget;
+  });
   document.getElementById('projectModalOverlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeProjectModal();
+    if (e.target === e.currentTarget && projectOverlayMousedownOnBg) closeProjectModal();
   });
 
   // Obsidian modal
