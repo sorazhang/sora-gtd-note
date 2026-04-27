@@ -256,17 +256,24 @@
     </div>
   </div>
 
-  <!-- Add Project Modal -->
+  <!-- Add / Edit Project Modal -->
   <div class="modal-overlay hidden" id="projectModalOverlay">
     <div class="modal">
       <div class="modal-header">
-        <h3>New Project</h3>
+        <h3 id="projectModalTitle">New Project</h3>
         <button class="modal-close-btn" id="projectModalClose">✕</button>
       </div>
       <div class="modal-body">
+        <input type="hidden" id="editProjectId">
         <div class="form-group">
           <label class="form-label">Project Name *</label>
           <input type="text" id="fProjectName" class="form-input" placeholder="Project name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Parent Project <span style="font-weight:400;color:var(--text-3)">(optional)</span></label>
+          <select id="fProjectParent" class="form-select">
+            <option value="">— None (top-level) —</option>
+          </select>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -291,7 +298,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <div></div>
+        <button class="btn-danger hidden" id="deleteProjectBtn">Delete</button>
         <div class="modal-footer-right">
           <button class="btn-secondary" id="projectModalCancel">Cancel</button>
           <button class="btn-primary" id="projectModalSave">Save Project</button>

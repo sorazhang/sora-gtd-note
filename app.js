@@ -191,19 +191,37 @@ function renderProjects() {
     el.innerHTML = '<div style="color:#4a5568;font-size:11px;padding:4px 8px;">No projects yet</div>';
     return;
   }
-  el.innerHTML = projects.map(p => `
-    <button class="project-item" data-project-id="${p.id}">
+
+  // Build tree: roots first, then children indented
+  const roots    = projects.filter(p => !p.parentId);
+  const children = projects.filter(p =>  p.parentId);
+
+  el.innerHTML = '';
+
+  function addItem(p, depth) {
+    const btn = document.createElement('button');
+    btn.className = 'project-item';
+    btn.dataset.projectId = p.id;
+    if (depth > 0) btn.classList.add('project-child');
+    btn.style.paddingLeft = `${8 + depth * 14}px`;
+    btn.innerHTML = `
+      ${depth > 0 ? '<span class="project-tree-line">↳</span>' : ''}
       <span class="project-dot ${p.type}"></span>
       <span class="project-name">${escHtml(p.name)}</span>
       ${p.status !== 'active' ? `<span class="project-status-badge">${p.status}</span>` : ''}
-    </button>
-  `).join('');
+    `;
+    btn.addEventListener('click', () => selectProject(p.id));
+    el.appendChild(btn);
 
-  el.querySelectorAll('.project-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      selectProject(btn.dataset.projectId);
-    });
-  });
+    // Recursively add children of this project
+    children.filter(c => c.parentId === p.id).forEach(c => addItem(c, depth + 1));
+  }
+
+  roots.forEach(p => addItem(p, 0));
+
+  // Orphans (parent was deleted)
+  const renderedIds = new Set([...roots, ...children].map(p => p.id));
+  projects.filter(p => !renderedIds.has(p.id)).forEach(p => addItem(p, 0));
 }
 
 function selectProject(id) {
@@ -377,22 +395,68 @@ function selectDay(dayKey, weekNum, weekYear) {
 
 function renderProjectView() {
   const el = document.getElementById('projectView');
-  const proj = Store.projects().find(p => p.id === state.selectedProjectId);
+  const projects = Store.projects();
+  const proj = projects.find(p => p.id === state.selectedProjectId);
   if (!proj) { el.innerHTML = '<div class="empty-state">Project not found.</div>'; return; }
 
-  const tasks = Store.tasks();
-  const linked = tasks.filter(t => t.project === proj.id);
-  const isGantt = state.projectViewMode === 'gantt';
+  const parent   = proj.parentId ? projects.find(p => p.id === proj.parentId) : null;
+  const children = projects.filter(p => p.parentId === proj.id);
+  const tasks    = Store.tasks();
+  const linked   = tasks.filter(t => t.project === proj.id);
+  const isGantt  = state.projectViewMode === 'gantt';
+
+  // Build breadcrumb trail (walk up the tree)
+  const breadcrumb = [];
+  let cur = parent;
+  while (cur) {
+    breadcrumb.unshift(cur);
+    cur = cur.parentId ? projects.find(p => p.id === cur.parentId) : null;
+  }
 
   el.innerHTML = `
+    ${breadcrumb.length > 0 ? `
+      <div class="proj-breadcrumb">
+        ${breadcrumb.map(p => `<span class="proj-crumb" data-id="${p.id}">${escHtml(p.name)}</span>`).join('<span class="proj-crumb-sep">›</span>')}
+        <span class="proj-crumb-sep">›</span>
+        <span class="proj-crumb current">${escHtml(proj.name)}</span>
+      </div>` : ''}
     <div class="proj-notes-section">
       <div class="proj-notes-header">
         <span class="proj-notes-label">Project Notes</span>
-        <button class="save-notes-btn" id="projNotesSaveBtn">Save</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="save-notes-btn" id="projEditBtn">Edit</button>
+          <button class="save-notes-btn" id="projNotesSaveBtn">Save</button>
+        </div>
       </div>
       <textarea class="proj-notes-textarea" id="projNotesTextarea"
         placeholder="Vision, goals, sequence, key reminders…">${escHtml(proj.notes || proj.description || '')}</textarea>
     </div>
+    ${children.length > 0 ? `
+      <div class="proj-sub-section">
+        <div class="proj-sub-header">
+          <span class="proj-notes-label">Sub-projects / Deliverables</span>
+          <button class="btn-add-task-proj" id="projAddChildBtn">+ Sub-project</button>
+        </div>
+        <div class="proj-sub-list">
+          ${children.map(c => {
+            const childTasks  = tasks.filter(t => t.project === c.id);
+            const done        = childTasks.filter(t => t.status === 'done').length;
+            const pct         = childTasks.length ? Math.round(done / childTasks.length * 100) : 0;
+            return `<div class="proj-sub-item" data-id="${c.id}">
+              <span class="project-dot ${c.type}"></span>
+              <span class="proj-sub-name">${escHtml(c.name)}</span>
+              ${c.status !== 'active' ? `<span class="project-status-badge">${c.status}</span>` : ''}
+              <span class="proj-sub-tasks">${childTasks.length} tasks</span>
+              ${childTasks.length > 0 ? `
+                <span class="proj-sub-pct">${pct}%</span>
+                <div class="progress-bar-mini"><div class="progress-bar-fill" style="width:${pct}%"></div></div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : `
+      <div class="proj-sub-section proj-sub-empty">
+        <button class="btn-add-task-proj" id="projAddChildBtn">+ Add Sub-project</button>
+      </div>`}
     <div class="proj-tasks-section">
       <div class="proj-tasks-header">
         <span>Tasks <span class="proj-task-count">${linked.length}</span></span>
@@ -407,12 +471,24 @@ function renderProjectView() {
   `;
 
   document.getElementById('projNotesSaveBtn').addEventListener('click', saveProjectNotes);
+  document.getElementById('projEditBtn').addEventListener('click', () => openProjectModal(proj.id));
   document.getElementById('projAddTaskBtn').addEventListener('click', () => openTaskModal(null, { project: proj.id }));
+  document.getElementById('projAddChildBtn').addEventListener('click', () => {
+    openProjectModal(null);
+    // Pre-select this project as parent after modal opens
+    setTimeout(() => { document.getElementById('fProjectParent').value = proj.id; }, 0);
+  });
   document.getElementById('projListBtn').addEventListener('click', () => {
     state.projectViewMode = 'list'; renderProjectView();
   });
   document.getElementById('projGanttBtn').addEventListener('click', () => {
     state.projectViewMode = 'gantt'; renderProjectView();
+  });
+  el.querySelectorAll('.proj-crumb[data-id]').forEach(c => {
+    c.addEventListener('click', () => selectProject(c.dataset.id));
+  });
+  el.querySelectorAll('.proj-sub-item[data-id]').forEach(item => {
+    item.addEventListener('click', () => selectProject(item.dataset.id));
   });
 
   if (isGantt) {
@@ -609,7 +685,9 @@ function renderRightPanel() {
     const proj = Store.projects().find(p => p.id === state.selectedProjectId);
     if (proj) {
       titleEl.textContent = proj.name;
-      datesEl.textContent = proj.type.charAt(0).toUpperCase() + proj.type.slice(1) + ' · ' + proj.status;
+      const parent = proj.parentId ? Store.projects().find(p => p.id === proj.parentId) : null;
+      datesEl.textContent = (parent ? parent.name + ' › ' : '') +
+        proj.type.charAt(0).toUpperCase() + proj.type.slice(1) + ' · ' + proj.status;
     }
     renderProjectView();
   } else if (state.selectedDay) {
@@ -1487,11 +1565,35 @@ function populateProjectDropdown(selectId) {
 
 // ===== Project Modal =====
 
-function openProjectModal() {
-  document.getElementById('fProjectName').value = '';
-  document.getElementById('fProjectType').value = 'personal';
-  document.getElementById('fProjectStatus').value = 'active';
-  document.getElementById('fProjectDesc').value = '';
+function openProjectModal(editId = null) {
+  const projects = Store.projects();
+  const editing  = editId ? projects.find(p => p.id === editId) : null;
+
+  document.getElementById('projectModalTitle').textContent = editing ? 'Edit Project' : 'New Project';
+  document.getElementById('editProjectId').value  = editId || '';
+  document.getElementById('fProjectName').value   = editing ? editing.name : '';
+  document.getElementById('fProjectType').value   = editing ? editing.type : 'personal';
+  document.getElementById('fProjectStatus').value = editing ? editing.status : 'active';
+  document.getElementById('fProjectDesc').value   = editing ? (editing.notes || editing.description || '') : '';
+  document.getElementById('deleteProjectBtn').classList.toggle('hidden', !editing);
+
+  // Populate parent dropdown — exclude self and own descendants to avoid cycles
+  const selfAndDescendants = new Set();
+  if (editId) {
+    const collect = id => {
+      selfAndDescendants.add(id);
+      projects.filter(p => p.parentId === id).forEach(p => collect(p.id));
+    };
+    collect(editId);
+  }
+  const parentSelect = document.getElementById('fProjectParent');
+  parentSelect.innerHTML = '<option value="">— None (top-level) —</option>' +
+    projects
+      .filter(p => !selfAndDescendants.has(p.id))
+      .map(p => `<option value="${p.id}"${editing && editing.parentId === p.id ? ' selected' : ''}>${escHtml(p.name)}</option>`)
+      .join('');
+  if (!editing) parentSelect.value = '';
+
   document.getElementById('projectModalOverlay').classList.remove('hidden');
   document.getElementById('fProjectName').focus();
 }
@@ -1500,21 +1602,51 @@ function closeProjectModal() {
   document.getElementById('projectModalOverlay').classList.add('hidden');
 }
 
+function deleteProject() {
+  const id = document.getElementById('editProjectId').value;
+  if (!id) return;
+  // Unparent children instead of deleting them
+  const projects = Store.projects().map(p => p.parentId === id ? { ...p, parentId: '' } : p)
+                                   .filter(p => p.id !== id);
+  Store.saveProjects(projects);
+  closeProjectModal();
+  if (state.selectedProjectId === id) {
+    state.selectedProjectId = null;
+    state.activeView = 'week';
+  }
+  renderSidebar();
+  renderRightPanel();
+}
+
 function saveProject() {
   const name = document.getElementById('fProjectName').value.trim();
   if (!name) { document.getElementById('fProjectName').focus(); return; }
 
+  const id       = document.getElementById('editProjectId').value;
+  const parentId = document.getElementById('fProjectParent').value;
   const projects = Store.projects();
-  projects.push({
-    id: uid(),
-    name,
-    type: document.getElementById('fProjectType').value,
-    status: document.getElementById('fProjectStatus').value,
-    description: document.getElementById('fProjectDesc').value.trim(),
-  });
+
+  if (id) {
+    const idx = projects.findIndex(p => p.id === id);
+    if (idx >= 0) {
+      projects[idx] = { ...projects[idx], name, parentId,
+        type: document.getElementById('fProjectType').value,
+        status: document.getElementById('fProjectStatus').value,
+        notes: document.getElementById('fProjectDesc').value.trim(),
+      };
+    }
+  } else {
+    projects.push({
+      id: uid(), name, parentId,
+      type: document.getElementById('fProjectType').value,
+      status: document.getElementById('fProjectStatus').value,
+      description: document.getElementById('fProjectDesc').value.trim(),
+    });
+  }
   Store.saveProjects(projects);
   closeProjectModal();
   renderSidebar();
+  if (state.activeView === 'project') renderRightPanel();
 }
 
 // ===== Obsidian Export =====
@@ -1713,6 +1845,7 @@ function bindEvents() {
   document.getElementById('projectModalClose').addEventListener('click', closeProjectModal);
   document.getElementById('projectModalCancel').addEventListener('click', closeProjectModal);
   document.getElementById('projectModalSave').addEventListener('click', saveProject);
+  document.getElementById('deleteProjectBtn').addEventListener('click', deleteProject);
   let projectOverlayMousedownOnBg = false;
   document.getElementById('projectModalOverlay').addEventListener('mousedown', e => {
     projectOverlayMousedownOnBg = e.target === e.currentTarget;
