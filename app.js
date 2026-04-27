@@ -655,6 +655,135 @@ function saveProjectNotes() {
   setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
 }
 
+// ===== Visual Board =====
+
+function renderBoardView() {
+  const el       = document.getElementById('boardView');
+  const projects = Store.projects();
+  const tasks    = Store.tasks();
+
+  el.innerHTML = '';
+
+  const roots      = projects.filter(p => !p.parentId);
+  const standalone = tasks.filter(t => !t.project);
+
+  if (roots.length === 0 && standalone.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:40px">No projects or tasks yet. Create a project to get started.</div>';
+    return;
+  }
+
+  const scroll = document.createElement('div');
+  scroll.className = 'board-scroll';
+  el.appendChild(scroll);
+
+  roots.forEach(root => {
+    scroll.appendChild(buildBoardProjectCard(root, projects, tasks, 0));
+  });
+
+  // Standalone tasks column
+  const active = standalone.filter(t => t.status !== 'done');
+  const done   = standalone.filter(t => t.status === 'done');
+  if (standalone.length > 0) {
+    const card = document.createElement('div');
+    card.className = 'board-card board-standalone';
+    card.innerHTML = `
+      <div class="board-card-top">
+        <div class="board-card-header">
+          <div class="board-card-icon">◈</div>
+          <div class="board-card-meta">
+            <div class="board-card-title">Standalone Tasks</div>
+            <div class="board-card-sub">${active.length} active · ${done.length} done</div>
+          </div>
+        </div>
+      </div>
+      <div class="board-task-list">
+        ${active.map(t => buildBoardTaskHtml(t)).join('')}
+        ${done.length > 0 ? `<div class="board-done-label">Completed (${done.length})</div>${done.map(t => buildBoardTaskHtml(t, true)).join('')}` : ''}
+      </div>`;
+    card.querySelectorAll('.board-task-row').forEach(row => {
+      row.addEventListener('click', () => openTaskModal(row.dataset.id));
+    });
+    scroll.appendChild(card);
+  }
+}
+
+function buildBoardProjectCard(proj, allProjects, allTasks, depth) {
+  const children   = allProjects.filter(p => p.parentId === proj.id);
+  const projTasks  = allTasks.filter(t => t.project === proj.id);
+  const active     = projTasks.filter(t => t.status !== 'done');
+  const done       = projTasks.filter(t => t.status === 'done');
+  const total      = projTasks.length;
+  const pct        = total ? Math.round(done.length / total * 100) : 0;
+  const notePreview = (proj.notes || proj.description || '').split('\n')[0].slice(0, 80);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = `board-card-wrapper depth-${Math.min(depth, 3)}`;
+
+  const card = document.createElement('div');
+  card.className = `board-card ${proj.type}${depth > 0 ? ' board-card-child' : ''}`;
+
+  card.innerHTML = `
+    <div class="board-card-top">
+      <div class="board-card-header" data-proj-id="${proj.id}">
+        <span class="board-type-dot ${proj.type}"></span>
+        <div class="board-card-meta">
+          <div class="board-card-title">${escHtml(proj.name)}</div>
+          <div class="board-card-sub">${proj.type} · <span class="board-status-${proj.status}">${proj.status}</span></div>
+        </div>
+        <button class="board-edit-btn" data-proj-id="${proj.id}">✎</button>
+      </div>
+      ${notePreview ? `<div class="board-note-preview">${escHtml(notePreview)}</div>` : ''}
+      ${total > 0 ? `
+        <div class="board-progress-row">
+          <div class="board-progress-bar"><div class="board-progress-fill ${proj.type}" style="width:${pct}%"></div></div>
+          <span class="board-progress-pct">${pct}% · ${done.length}/${total}</span>
+        </div>` : '<div class="board-no-tasks">No tasks yet</div>'}
+    </div>
+    ${active.length > 0 ? `
+    <div class="board-task-list">
+      ${active.slice(0, 6).map(t => buildBoardTaskHtml(t)).join('')}
+      ${active.length > 6 ? `<div class="board-task-more">+${active.length - 6} more tasks</div>` : ''}
+    </div>` : ''}
+  `;
+
+  card.querySelector('.board-card-header').addEventListener('click', () => selectProject(proj.id));
+  card.querySelector('.board-edit-btn').addEventListener('click', e => {
+    e.stopPropagation(); openProjectModal(proj.id);
+  });
+  card.querySelectorAll('.board-task-row').forEach(row => {
+    row.addEventListener('click', e => { e.stopPropagation(); openTaskModal(row.dataset.id); });
+  });
+
+  wrapper.appendChild(card);
+
+  // Children nested below
+  if (children.length > 0) {
+    const childrenWrap = document.createElement('div');
+    childrenWrap.className = 'board-children-wrap';
+    children.forEach(child => {
+      childrenWrap.appendChild(buildBoardProjectCard(child, allProjects, allTasks, depth + 1));
+    });
+    wrapper.appendChild(childrenWrap);
+  }
+
+  return wrapper;
+}
+
+function buildBoardTaskHtml(t, isDone = false) {
+  const PRIORITY_COLOR = { high: '#ef4444', medium: '#f59e0b', low: '#6ee7b7' };
+  const remain = calcRemainEffort(t.effort, t.progress);
+  return `<div class="board-task-row${isDone ? ' done' : ''}" data-id="${t.id}">
+    <span class="board-task-priority" style="background:${PRIORITY_COLOR[t.priority] || '#e2e8f0'}"></span>
+    <span class="board-task-name">${escHtml(t.title)}</span>
+    <span class="board-task-badges">
+      ${t.effort && t.effort !== 'TBD' ? `<span class="board-task-badge">${t.effort}</span>` : ''}
+      ${t.progress > 0 ? `<span class="board-task-badge accent">${t.progress}%</span>` : ''}
+      ${remain && !isDone ? `<span class="board-task-badge warn">${remain}</span>` : ''}
+      ${t.taskId ? `<span class="board-task-badge mono">${escHtml(t.taskId)}</span>` : ''}
+    </span>
+  </div>`;
+}
+
 // ===== Right Panel Router =====
 
 function renderRightPanel() {
@@ -663,11 +792,12 @@ function renderRightPanel() {
   const inboxView   = document.getElementById('inboxView');
   const weekView    = document.getElementById('weekView');
   const projectView = document.getElementById('projectView');
+  const boardView   = document.getElementById('boardView');
   const titleEl     = document.querySelector('.week-panel-title');
   const datesEl     = document.querySelector('.week-panel-dates');
   const generateBtn = document.getElementById('generateNoteBtn');
 
-  [dayView, todayView, inboxView, weekView, projectView].forEach(el => el.classList.add('hidden'));
+  [dayView, todayView, inboxView, weekView, projectView, boardView].forEach(el => el.classList.add('hidden'));
   generateBtn.classList.add('hidden');
 
   if (state.activeView === 'today') {
@@ -680,6 +810,11 @@ function renderRightPanel() {
     titleEl.textContent = 'Inbox Review';
     datesEl.textContent = 'Process and sort your captured tasks';
     renderInboxReview();
+  } else if (state.activeView === 'board') {
+    boardView.classList.remove('hidden');
+    titleEl.textContent = 'Visual Board';
+    datesEl.textContent = 'Project & task relationships';
+    renderBoardView();
   } else if (state.activeView === 'project') {
     projectView.classList.remove('hidden');
     const proj = Store.projects().find(p => p.id === state.selectedProjectId);
