@@ -138,6 +138,7 @@ let state = {
   selectedWeekYear: isoWeekYear(today),
   selectedDay: null,       // 'YYYY-MM-DD' when a specific day cell is clicked
   selectedProjectId: null, // project id when project view is active
+  projectViewMode: 'list', // 'list' | 'gantt'
   activeView: 'week',
   activeTab: 'all',
   editingTaskId: null,
@@ -370,8 +371,7 @@ function renderProjectView() {
 
   const tasks = Store.tasks();
   const linked = tasks.filter(t => t.project === proj.id);
-  const active = linked.filter(t => t.status !== 'done');
-  const done   = linked.filter(t => t.status === 'done');
+  const isGantt = state.projectViewMode === 'gantt';
 
   el.innerHTML = `
     <div class="proj-notes-section">
@@ -385,64 +385,168 @@ function renderProjectView() {
     <div class="proj-tasks-section">
       <div class="proj-tasks-header">
         <span>Tasks <span class="proj-task-count">${linked.length}</span></span>
+        <div class="proj-view-toggle">
+          <button class="proj-toggle-btn${!isGantt ? ' active' : ''}" id="projListBtn">List</button>
+          <button class="proj-toggle-btn${isGantt ? ' active' : ''}" id="projGanttBtn">Gantt</button>
+        </div>
         <button class="btn-add-task-proj" id="projAddTaskBtn">+ Task</button>
       </div>
       <div class="proj-tasks-scroll" id="projTasksScroll"></div>
     </div>
   `;
 
-  const scroll = el.querySelector('#projTasksScroll');
+  document.getElementById('projNotesSaveBtn').addEventListener('click', saveProjectNotes);
+  document.getElementById('projAddTaskBtn').addEventListener('click', () => openTaskModal(null, { project: proj.id }));
+  document.getElementById('projListBtn').addEventListener('click', () => {
+    state.projectViewMode = 'list'; renderProjectView();
+  });
+  document.getElementById('projGanttBtn').addEventListener('click', () => {
+    state.projectViewMode = 'gantt'; renderProjectView();
+  });
+
+  if (isGantt) {
+    renderProjectGantt(linked, el.querySelector('#projTasksScroll'));
+  } else {
+    renderProjectList(linked, el.querySelector('#projTasksScroll'));
+  }
+}
+
+function renderProjectList(linked, scroll) {
+  const active = linked.filter(t => t.status !== 'done');
+  const done   = linked.filter(t => t.status === 'done');
 
   if (linked.length === 0) {
     scroll.innerHTML = '<div class="empty-state" style="padding:24px">No tasks linked to this project yet.</div>';
-  } else {
-    // Group active tasks by week
-    const weekMap = new Map();
-    active.forEach(t => {
-      const key = t.week && t.year ? `${t.year}-W${String(t.week).padStart(2,'0')}` : 'no-week';
-      if (!weekMap.has(key)) weekMap.set(key, { week: t.week, year: t.year, tasks: [] });
-      weekMap.get(key).tasks.push(t);
-    });
-
-    // Sort weeks ascending (no-week at end)
-    const sorted = [...weekMap.entries()].sort(([a], [b]) => {
-      if (a === 'no-week') return 1;
-      if (b === 'no-week') return -1;
-      return a < b ? -1 : 1;
-    });
-
-    const now = new Date();
-    const currentWeek = isoWeek(now);
-    const currentYear = isoWeekYear(now);
-
-    sorted.forEach(([, { week, year, tasks: weekTasks }]) => {
-      const header = document.createElement('div');
-      header.className = 'proj-week-header';
-      if (week && year) {
-        const { start, end } = weekRange(week, year);
-        const isCurrent = week === currentWeek && year === currentYear;
-        header.innerHTML = `
-          <span class="proj-week-label${isCurrent ? ' current' : ''}">W${week} · ${formatDateShort(start)}–${formatDateShort(end)}</span>
-          <span class="proj-week-count">${weekTasks.length}</span>`;
-      } else {
-        header.innerHTML = `<span class="proj-week-label">No week assigned</span>`;
-      }
-      scroll.appendChild(header);
-      weekTasks.forEach(t => scroll.appendChild(buildTaskCard(t)));
-    });
-
-    if (done.length > 0) {
-      const doneHeader = document.createElement('div');
-      doneHeader.className = 'proj-week-header done-header';
-      doneHeader.innerHTML = `<span class="proj-week-label">Completed</span><span class="proj-week-count">${done.length}</span>`;
-      scroll.appendChild(doneHeader);
-      done.forEach(t => scroll.appendChild(buildTaskCard(t)));
-    }
+    return;
   }
 
-  document.getElementById('projNotesSaveBtn').addEventListener('click', saveProjectNotes);
-  document.getElementById('projAddTaskBtn').addEventListener('click', () => {
-    openTaskModal(null, { project: proj.id });
+  const now = new Date();
+  const currentWeek = isoWeek(now);
+  const currentYear = isoWeekYear(now);
+
+  const weekMap = new Map();
+  active.forEach(t => {
+    const key = t.week && t.year ? `${t.year}-W${String(t.week).padStart(2,'0')}` : 'no-week';
+    if (!weekMap.has(key)) weekMap.set(key, { week: t.week, year: t.year, tasks: [] });
+    weekMap.get(key).tasks.push(t);
+  });
+
+  const sorted = [...weekMap.entries()].sort(([a], [b]) => {
+    if (a === 'no-week') return 1;
+    if (b === 'no-week') return -1;
+    return a < b ? -1 : 1;
+  });
+
+  sorted.forEach(([, { week, year, tasks: weekTasks }]) => {
+    const header = document.createElement('div');
+    header.className = 'proj-week-header';
+    if (week && year) {
+      const { start, end } = weekRange(week, year);
+      const isCurrent = week === currentWeek && year === currentYear;
+      header.innerHTML = `
+        <span class="proj-week-label${isCurrent ? ' current' : ''}">W${week} · ${formatDateShort(start)}–${formatDateShort(end)}</span>
+        <span class="proj-week-count">${weekTasks.length}</span>`;
+    } else {
+      header.innerHTML = `<span class="proj-week-label">No week assigned</span>`;
+    }
+    scroll.appendChild(header);
+    weekTasks.forEach(t => scroll.appendChild(buildTaskCard(t)));
+  });
+
+  if (done.length > 0) {
+    const doneHeader = document.createElement('div');
+    doneHeader.className = 'proj-week-header done-header';
+    doneHeader.innerHTML = `<span class="proj-week-label">Completed</span><span class="proj-week-count">${done.length}</span>`;
+    scroll.appendChild(doneHeader);
+    done.forEach(t => scroll.appendChild(buildTaskCard(t)));
+  }
+}
+
+function renderProjectGantt(linked, scroll) {
+  const withWeek = linked.filter(t => t.week && t.year);
+  if (withWeek.length === 0) {
+    scroll.innerHTML = '<div class="empty-state" style="padding:24px">Assign weeks to tasks to see the Gantt chart.</div>';
+    return;
+  }
+
+  // Compute week range
+  const toOrd = t => t.year * 53 + t.week;
+  const minOrd = Math.min(...withWeek.map(toOrd));
+  const maxOrd = Math.max(...withWeek.map(toOrd));
+  // Pad 1 week on each side, show at least 6 columns
+  const pad = 1;
+  const allWeeks = [];
+  for (let ord = minOrd - pad; ord <= maxOrd + pad; ord++) {
+    const y = Math.floor((ord - 1) / 53) || withWeek[0].year;
+    const w = ((ord - 1) % 53) + 1;
+    allWeeks.push({ week: w, year: y, ord });
+  }
+  // Ensure at least 6 columns
+  while (allWeeks.length < 6) allWeeks.push({ week: allWeeks[allWeeks.length-1].week + 1, year: allWeeks[allWeeks.length-1].year, ord: allWeeks[allWeeks.length-1].ord + 1 });
+
+  const now = new Date();
+  const currOrd = isoWeekYear(now) * 53 + isoWeek(now);
+
+  const COL_W = 72; // px per week column
+  const LABEL_W = 160;
+  const totalW = LABEL_W + allWeeks.length * COL_W;
+
+  // Header row
+  const header = document.createElement('div');
+  header.className = 'gantt-header';
+  header.style.width = totalW + 'px';
+  header.innerHTML = `<div class="gantt-label-col"></div>` +
+    allWeeks.map(({ week, year, ord }) => {
+      const isCurr = ord === currOrd;
+      return `<div class="gantt-week-col${isCurr ? ' gantt-current' : ''}" style="width:${COL_W}px">
+        <span class="gantt-week-num">W${week}</span>
+        <span class="gantt-week-yr">${year}</span>
+      </div>`;
+    }).join('');
+  scroll.appendChild(header);
+
+  // Task rows — sorted by week asc, done at bottom
+  const active = withWeek.filter(t => t.status !== 'done').sort((a,b) => toOrd(a) - toOrd(b));
+  const done   = withWeek.filter(t => t.status === 'done').sort((a,b) => toOrd(a) - toOrd(b));
+  const noWeek = linked.filter(t => !t.week || !t.year);
+
+  [...active, ...done, ...noWeek].forEach(task => {
+    const row = document.createElement('div');
+    row.className = 'gantt-row';
+    row.style.width = totalW + 'px';
+    row.addEventListener('click', () => openTaskModal(task.id));
+
+    const label = document.createElement('div');
+    label.className = 'gantt-label-col';
+    label.title = task.title;
+    label.innerHTML = `
+      <span class="gantt-task-dot ${task.category}${task.status === 'done' ? ' done' : ''}"></span>
+      <span class="gantt-task-name${task.status === 'done' ? ' done' : ''}">${escHtml(task.title)}</span>
+      ${task.taskId ? `<span class="gantt-task-id">${escHtml(task.taskId)}</span>` : ''}
+    `;
+    row.appendChild(label);
+
+    // Week cells
+    allWeeks.forEach(({ week, year, ord }) => {
+      const cell = document.createElement('div');
+      cell.className = `gantt-cell${ord === currOrd ? ' gantt-current' : ''}`;
+      cell.style.width = COL_W + 'px';
+
+      if (task.week === week && task.year === year) {
+        const bar = document.createElement('div');
+        const effort = task.effort;
+        const barClass = task.status === 'done' ? 'done'
+          : task.category === 'work' ? 'work' : 'personal';
+        bar.className = `gantt-bar ${barClass}`;
+        const effortLabel = effort && effort !== 'TBD' ? effort : '';
+        bar.textContent = effortLabel;
+        bar.title = `${task.title}${effortLabel ? ' · ' + effortLabel : ''}`;
+        cell.appendChild(bar);
+      }
+      row.appendChild(cell);
+    });
+
+    scroll.appendChild(row);
   });
 }
 
