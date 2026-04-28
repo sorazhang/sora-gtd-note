@@ -2745,18 +2745,24 @@ init();
   async function pushToCloud() {
     if (!_fbUser) return;
     setSyncLabel('syncing');
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 10000)
+    );
     try {
-      await db.collection('users').doc(_fbUser.uid).set({
-        tasks:     Store.allTasks(),
-        projects:  Store.allProjects(),
-        weekNotes: Store.weekNotes(),
-        uiState:   Store.loadUIState() || {},
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
+      await Promise.race([
+        db.collection('users').doc(_fbUser.uid).set({
+          tasks:     Store.allTasks(),
+          projects:  Store.allProjects(),
+          weekNotes: Store.weekNotes(),
+          uiState:   Store.loadUIState() || {},
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }),
+        timeout,
+      ]);
       setSyncLabel('saved');
     } catch (e) {
       console.error('Sync error', e);
-      setSyncLabel('error');
+      setSyncLabel('error', e.code || e.message);
     }
   }
 
@@ -2780,7 +2786,7 @@ init();
     }
   }
 
-  function setSyncLabel(status) {
+  function setSyncLabel(status, detail) {
     const el = document.getElementById('syncLabel');
     if (!el) return;
     const map = {
@@ -2791,7 +2797,7 @@ init();
       loading: ['☁ Loading…', 'sync-pending'],
     };
     const [text, cls] = map[status] || ['', ''];
-    el.textContent = text;
+    el.textContent = detail ? `${text}: ${detail}` : text;
     el.className   = `sync-label ${cls}`;
   }
 
