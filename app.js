@@ -74,6 +74,9 @@ function todayStr() {
 
 const KEYS = { tasks: 'gtd_tasks', projects: 'gtd_projects', weekNotes: 'gtd_week_notes', todayPlan: 'gtd_today', uiState: 'gtd_ui_state' };
 
+// No-op until Firebase initialises — reassigned in initFirebase()
+let scheduleSync = () => {};
+
 const Store = {
   allTasks()     { return JSON.parse(localStorage.getItem(KEYS.tasks)    || '[]'); },
   allProjects()  { return JSON.parse(localStorage.getItem(KEYS.projects) || '[]'); },
@@ -82,9 +85,9 @@ const Store = {
   archivedTasks()    { return Store.allTasks().filter(t =>  t.archived); },
   archivedProjects() { return Store.allProjects().filter(p =>  p.archived); },
   weekNotes() { return JSON.parse(localStorage.getItem(KEYS.weekNotes)|| '{}'); },
-  saveTasks(t)     { localStorage.setItem(KEYS.tasks,    JSON.stringify(t)); },
-  saveProjects(p)  { localStorage.setItem(KEYS.projects, JSON.stringify(p)); },
-  saveWeekNotes(n) { localStorage.setItem(KEYS.weekNotes,JSON.stringify(n)); },
+  saveTasks(t)     { localStorage.setItem(KEYS.tasks,    JSON.stringify(t)); scheduleSync(); },
+  saveProjects(p)  { localStorage.setItem(KEYS.projects, JSON.stringify(p)); scheduleSync(); },
+  saveWeekNotes(n) { localStorage.setItem(KEYS.weekNotes,JSON.stringify(n)); scheduleSync(); },
   todayPlan() {
     const raw = JSON.parse(localStorage.getItem(KEYS.todayPlan) || 'null');
     const key = todayDateKey();
@@ -93,7 +96,7 @@ const Store = {
   },
   saveTodayPlan(p) { localStorage.setItem(KEYS.todayPlan, JSON.stringify(p)); },
   loadUIState()    { return JSON.parse(localStorage.getItem(KEYS.uiState) || 'null'); },
-  saveUIState(s)   { localStorage.setItem(KEYS.uiState, JSON.stringify(s)); },
+  saveUIState(s)   { localStorage.setItem(KEYS.uiState, JSON.stringify(s)); scheduleSync(); },
 };
 
 function todayDateKey() {
@@ -2708,3 +2711,122 @@ function init() {
 }
 
 init();
+
+// ===== Firebase Auth & Sync =====
+
+(function initFirebase() {
+  const cfg = {
+    apiKey:            'AIzaSyA-53Mh_cPFPfjeHgitm2ePwoD33ZKCiqk',
+    authDomain:        'sora-gtd-note.firebaseapp.com',
+    projectId:         'sora-gtd-note',
+    storageBucket:     'sora-gtd-note.firebasestorage.app',
+    messagingSenderId: '529931922874',
+    appId:             '1:529931922874:web:7c4335fe20380cd8f84183',
+  };
+
+  if (typeof firebase === 'undefined') return; // SDK not loaded (offline)
+  firebase.initializeApp(cfg);
+
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
+
+  let _fbUser        = null;
+  let _syncTimer     = null;
+  let _suppressSync  = false;
+
+  // Reassign the stub so Store.save* methods trigger real syncs
+  scheduleSync = function () {
+    if (!_fbUser || _suppressSync) return;
+    clearTimeout(_syncTimer);
+    setSyncLabel('pending');
+    _syncTimer = setTimeout(pushToCloud, 1500);
+  };
+
+  async function pushToCloud() {
+    if (!_fbUser) return;
+    setSyncLabel('syncing');
+    try {
+      await db.collection('users').doc(_fbUser.uid).set({
+        tasks:     Store.allTasks(),
+        projects:  Store.allProjects(),
+        weekNotes: Store.weekNotes(),
+        uiState:   Store.loadUIState() || {},
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      setSyncLabel('saved');
+    } catch (e) {
+      console.error('Sync error', e);
+      setSyncLabel('error');
+    }
+  }
+
+  async function pullFromCloud() {
+    if (!_fbUser) return false;
+    try {
+      const snap = await db.collection('users').doc(_fbUser.uid).get();
+      if (!snap.exists) return false;
+      const d = snap.data();
+      _suppressSync = true;
+      if (d.tasks     !== undefined) Store.saveTasks(d.tasks);
+      if (d.projects  !== undefined) Store.saveProjects(d.projects);
+      if (d.weekNotes !== undefined) Store.saveWeekNotes(d.weekNotes);
+      if (d.uiState   !== undefined) Store.saveUIState(d.uiState);
+      _suppressSync = false;
+      return true;
+    } catch (e) {
+      console.error('Pull error', e);
+      _suppressSync = false;
+      return false;
+    }
+  }
+
+  function setSyncLabel(status) {
+    const el = document.getElementById('syncLabel');
+    if (!el) return;
+    const map = {
+      pending: ['☁ Saving…',  'sync-pending'],
+      syncing: ['☁ Syncing…', 'sync-pending'],
+      saved:   ['☁ Synced',   'sync-saved'  ],
+      error:   ['☁ Error',    'sync-error'  ],
+      loading: ['☁ Loading…', 'sync-pending'],
+    };
+    const [text, cls] = map[status] || ['', ''];
+    el.textContent = text;
+    el.className   = `sync-label ${cls}`;
+  }
+
+  function renderAuthUI(user) {
+    const wrap = document.getElementById('authWrap');
+    if (!wrap) return;
+    if (user) {
+      wrap.innerHTML = `
+        <span id="syncLabel" class="sync-label"></span>
+        ${user.photoURL
+          ? `<img class="auth-avatar" src="${user.photoURL}" title="${escHtml(user.displayName || user.email)}">`
+          : `<span class="auth-initials">${(user.displayName || user.email || '?')[0].toUpperCase()}</span>`}
+        <button class="btn-secondary btn-sm" id="signOutBtn">Sign out</button>`;
+      document.getElementById('signOutBtn').addEventListener('click', () => auth.signOut());
+    } else {
+      wrap.innerHTML = `<button class="btn-sync" id="signInBtn">☁ Sign in to sync</button>`;
+      document.getElementById('signInBtn').addEventListener('click', () =>
+        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(console.error)
+      );
+    }
+  }
+
+  auth.onAuthStateChanged(async user => {
+    _fbUser = user;
+    renderAuthUI(user);
+    if (user) {
+      setSyncLabel('loading');
+      const hadCloudData = await pullFromCloud();
+      if (!hadCloudData) {
+        // First sign-in on this account — upload local data to cloud
+        await pushToCloud();
+      } else {
+        renderAll();
+        setSyncLabel('saved');
+      }
+    }
+  });
+})();
