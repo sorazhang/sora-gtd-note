@@ -2729,6 +2729,7 @@ init();
 
   const auth = firebase.auth();
   const db   = firebase.firestore();
+  db.settings({ experimentalForceLongPolling: true, merge: true });
 
   let _fbUser        = null;
   let _syncTimer     = null;
@@ -2746,7 +2747,7 @@ init();
     if (!_fbUser) return;
     setSyncLabel('syncing');
     const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 10000)
+      setTimeout(() => reject(new Error('timeout')), 20000)
     );
     try {
       await Promise.race([
