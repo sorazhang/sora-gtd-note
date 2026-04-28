@@ -895,7 +895,7 @@ body {
 
 .week-notes-textarea {
   width: 100%;
-  height: 90px;
+  height: 160px;
   resize: none;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1025,7 +1025,7 @@ body {
   background: #fff;
 }
 
-.form-textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+.form-textarea { resize: vertical; min-height: 140px; line-height: 1.5; }
 
 /* Note Preview */
 .note-filename { margin-bottom: 0; }
@@ -1161,7 +1161,7 @@ body {
 }
 .day-notes-ta {
   width: 100%;
-  height: 76px;
+  height: 140px;
   resize: none;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1787,8 +1787,8 @@ body {
   line-height: 1.6;
   padding: 8px 10px;
   font-family: inherit;
-  min-height: 120px;
-  max-height: 200px;
+  min-height: 200px;
+  max-height: 400px;
   overflow-y: auto;
 }
 .proj-notes-textarea:focus { outline: none; border-color: var(--accent); }
