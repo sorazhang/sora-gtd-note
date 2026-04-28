@@ -172,6 +172,7 @@ body {
   white-space: nowrap;
 }
 .btn-sync:hover { background: rgba(255,255,255,.15); color: #fff; }
+.sign-in-error { font-size: 10px; color: #fca5a5; max-width: 200px; }
 .btn-sm { padding: 4px 10px !important; font-size: 11px !important; }
 
 /* ===== Buttons ===== */

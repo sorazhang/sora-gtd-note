@@ -2807,9 +2807,13 @@ init();
         <button class="btn-secondary btn-sm" id="signOutBtn">Sign out</button>`;
       document.getElementById('signOutBtn').addEventListener('click', () => auth.signOut());
     } else {
-      wrap.innerHTML = `<button class="btn-sync" id="signInBtn">☁ Sign in to sync</button>`;
+      wrap.innerHTML = `<button class="btn-sync" id="signInBtn">☁ Sign in to sync</button><span id="signInError" class="sign-in-error"></span>`;
       document.getElementById('signInBtn').addEventListener('click', () =>
-        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(console.error)
+        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e => {
+          console.error(e);
+          const errEl = document.getElementById('signInError');
+          if (errEl) errEl.textContent = e.code || e.message;
+        })
       );
     }
   }
