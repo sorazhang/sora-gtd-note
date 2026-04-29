@@ -2734,10 +2734,17 @@ init();
   let _fbUser        = null;
   let _syncTimer     = null;
   let _suppressSync  = false;
+  const LOCAL_TS_KEY = 'gtd_local_updated_at';
+
+  // Stamp existing local data so it wins over a blank cloud on first sign-in
+  if (!localStorage.getItem(LOCAL_TS_KEY) && localStorage.getItem(KEYS.tasks) !== null) {
+    localStorage.setItem(LOCAL_TS_KEY, Date.now().toString());
+  }
 
   // Reassign the stub so Store.save* methods trigger real syncs
   scheduleSync = function () {
     if (!_fbUser || _suppressSync) return;
+    localStorage.setItem(LOCAL_TS_KEY, Date.now().toString());
     clearTimeout(_syncTimer);
     setSyncLabel('pending');
     _syncTimer = setTimeout(pushToCloud, 1500);
@@ -2773,6 +2780,16 @@ init();
       const snap = await db.collection('users').doc(_fbUser.uid).get();
       if (!snap.exists) return false;
       const d = snap.data();
+
+      // Only overwrite local data if cloud is strictly newer
+      const cloudTs = d.updatedAt?.toMillis?.() || 0;
+      const localTs = parseInt(localStorage.getItem(LOCAL_TS_KEY) || '0', 10);
+      if (localTs > cloudTs) {
+        // Local is newer — push it up instead of overwriting it
+        await pushToCloud();
+        return true;
+      }
+
       _suppressSync = true;
       if (d.tasks     !== undefined) Store.saveTasks(d.tasks);
       if (d.projects  !== undefined) Store.saveProjects(d.projects);
