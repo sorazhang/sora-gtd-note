@@ -2150,6 +2150,28 @@ function openTaskModal(taskId, defaults = null) {
     if (!taskId) document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   };
 
+  // Activity log — show when editing, remove when creating
+  const existingLog = document.getElementById('taskActivityLog');
+  if (existingLog) existingLog.remove();
+  if (taskId) {
+    const task = Store.tasks().find(t => t.id === taskId);
+    const log = task && task.activityLog && task.activityLog.length ? task.activityLog : null;
+    const section = document.createElement('div');
+    section.id = 'taskActivityLog';
+    section.className = 'activity-log';
+    section.innerHTML = `<div class="activity-log-title">Week Change History</div>` + (log
+      ? log.slice().reverse().map(e => {
+          const d = new Date(e.at);
+          const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+          return `<div class="activity-log-entry">
+            <span class="activity-log-date">${dateStr}</span>
+            <span class="activity-log-desc">W${e.from.week}·${e.from.year} → W${e.to.week}·${e.to.year}</span>
+          </div>`;
+        }).join('')
+      : `<div class="activity-log-empty">No week changes recorded yet.</div>`);
+    document.querySelector('#taskModalOverlay .modal-body').appendChild(section);
+  }
+
   modal.classList.remove('hidden');
   document.getElementById('fTaskTitle').focus();
 }
@@ -2188,7 +2210,18 @@ function saveTask() {
   if (id) {
     const idx = tasks.findIndex(t => t.id === id);
     if (idx >= 0) {
-      tasks[idx] = { ...tasks[idx], ...taskData };
+      const old = tasks[idx];
+      const weekChanged = old.week !== taskData.week || old.year !== taskData.year;
+      const log = old.activityLog ? [...old.activityLog] : [];
+      if (weekChanged) {
+        log.push({
+          type: 'week-change',
+          from: { week: old.week, year: old.year },
+          to:   { week: taskData.week, year: taskData.year },
+          at:   new Date().toISOString(),
+        });
+      }
+      tasks[idx] = { ...old, ...taskData, activityLog: log };
     }
   } else {
     const taskId = document.getElementById('fTaskId').value || generateTaskId(projectVal);
