@@ -2729,7 +2729,7 @@ init();
 
   const auth = firebase.auth();
   const db   = firebase.firestore();
-  db.settings({ experimentalForceLongPolling: true, merge: true });
+  db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
 
   let _fbUser        = null;
   let _syncTimer     = null;
