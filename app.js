@@ -2899,11 +2899,6 @@ init();
   let _suppressSync  = false;
   const LOCAL_TS_KEY = 'gtd_local_updated_at';
 
-  // Stamp existing local data so it wins over a blank cloud on first sign-in
-  if (!localStorage.getItem(LOCAL_TS_KEY) && localStorage.getItem(KEYS.tasks) !== null) {
-    localStorage.setItem(LOCAL_TS_KEY, Date.now().toString());
-  }
-
   // Reassign the stub so Store.save* methods trigger real syncs
   scheduleSync = function () {
     if (!_fbUser || _suppressSync) return;
