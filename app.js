@@ -1348,6 +1348,17 @@ function reorderDayTask(taskId, dk, dir) {
 let focusState = { queue: [], doneIds: [] };
 let focusTimer = { interval: null, startedAt: null, accumulated: 0, taskId: null, paused: false };
 
+function formatTimeSpent(minutes) {
+  if (!minutes || minutes <= 0) return null;
+  const totalSec = Math.round(minutes * 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
+
 function parseEffortMs(effort) {
   if (!effort || effort === 'TBD') return null;
   const m = parseInt(effort);
@@ -2157,6 +2168,14 @@ function buildTaskCard(task) {
     meta.appendChild(progWrap);
   }
 
+  if (task.timeSpent > 0) {
+    const tsTag = document.createElement('span');
+    tsTag.className = 'time-spent-badge';
+    tsTag.title = 'Time spent in focus mode';
+    tsTag.textContent = '⏱ ' + formatTimeSpent(task.timeSpent);
+    meta.appendChild(tsTag);
+  }
+
   if (task.taskId) {
     const idTag = document.createElement('span');
     idTag.className = 'effort-badge tbd';
@@ -2224,6 +2243,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskDelegated').value = task.delegated || '';
     document.getElementById('fTaskContext').value = task.context || '';
     document.getElementById('fTaskNotes').value = task.notes || '';
+    document.getElementById('fTaskTimeSpent').value = formatTimeSpent(task.timeSpent) || '—';
   } else {
     titleEl.textContent = 'Add Task';
     deleteBtn.classList.add('hidden');
@@ -2242,6 +2262,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskDelegated').value = '';
     document.getElementById('fTaskContext').value = '';
     document.getElementById('fTaskNotes').value = '';
+    document.getElementById('fTaskTimeSpent').value = '—';
     document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   }
 
