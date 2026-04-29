@@ -2451,6 +2451,61 @@ body {
   margin-right: 2px;
 }
 
+/* ===== Focus Timer ===== */
+.focus-timer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,.12);
+}
+.focus-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.focus-timer-elapsed {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  color: #fff;
+}
+.focus-timer-sep {
+  font-size: 18px;
+  color: rgba(255,255,255,.4);
+}
+.focus-timer-estimate {
+  font-size: 18px;
+  color: rgba(255,255,255,.55);
+  font-variant-numeric: tabular-nums;
+}
+.focus-timer-pause {
+  margin-left: auto;
+  background: rgba(255,255,255,.15);
+  border: none;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.focus-timer-pause:hover { background: rgba(255,255,255,.25); }
+.focus-timer-track {
+  margin-top: 8px;
+  height: 4px;
+  background: rgba(255,255,255,.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.focus-timer-bar {
+  height: 100%;
+  width: 0%;
+  background: #6366f1;
+  border-radius: 2px;
+  transition: width .9s linear, background .3s;
+}
+
 /* ===== Activity Log ===== */
 .activity-log {
   margin-top: 20px;

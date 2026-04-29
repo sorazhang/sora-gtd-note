@@ -1346,6 +1346,91 @@ function reorderDayTask(taskId, dk, dir) {
 // ===== Today's Focus =====
 
 let focusState = { queue: [], doneIds: [] };
+let focusTimer = { interval: null, startedAt: null, accumulated: 0, taskId: null, paused: false };
+
+function parseEffortMs(effort) {
+  if (!effort || effort === 'TBD') return null;
+  const m = parseInt(effort);
+  return isNaN(m) ? null : m * 60000;
+}
+
+function formatMs(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function startFocusTimer(taskId) {
+  stopFocusTimer(false);
+  const task = Store.tasks().find(t => t.id === taskId);
+  focusTimer.taskId     = taskId;
+  focusTimer.accumulated = (task && task.timeSpent ? task.timeSpent * 60000 : 0);
+  focusTimer.startedAt  = Date.now();
+  focusTimer.paused     = false;
+  focusTimer.interval   = setInterval(updateTimerDisplay, 1000);
+  updateTimerDisplay();
+}
+
+function stopFocusTimer(save = true) {
+  clearInterval(focusTimer.interval);
+  focusTimer.interval = null;
+  const sessionMs = focusTimer.startedAt && !focusTimer.paused ? Date.now() - focusTimer.startedAt : 0;
+  const totalMs   = focusTimer.accumulated + sessionMs;
+  if (save && focusTimer.taskId) {
+    const tasks = Store.allTasks();
+    const idx = tasks.findIndex(t => t.id === focusTimer.taskId);
+    if (idx >= 0) {
+      tasks[idx] = { ...tasks[idx], timeSpent: Math.round(totalMs / 6000) / 10 };
+      Store.saveTasks(tasks);
+    }
+  }
+  focusTimer.startedAt = null;
+  return totalMs;
+}
+
+function pauseFocusTimer() {
+  if (focusTimer.paused || !focusTimer.startedAt) return;
+  clearInterval(focusTimer.interval);
+  focusTimer.interval = null;
+  focusTimer.accumulated += Date.now() - focusTimer.startedAt;
+  focusTimer.startedAt = null;
+  focusTimer.paused = true;
+  updateTimerDisplay();
+}
+
+function resumeFocusTimer() {
+  if (!focusTimer.paused) return;
+  focusTimer.startedAt = Date.now();
+  focusTimer.paused = false;
+  focusTimer.interval = setInterval(updateTimerDisplay, 1000);
+  updateTimerDisplay();
+}
+
+function updateTimerDisplay() {
+  const elEl  = document.getElementById('focusTimerElapsed');
+  const barEl = document.getElementById('focusTimerBar');
+  const btnEl = document.getElementById('focusPauseBtn');
+  if (!elEl) return;
+
+  const sessionMs = focusTimer.startedAt ? Date.now() - focusTimer.startedAt : 0;
+  const totalMs   = focusTimer.accumulated + sessionMs;
+  elEl.textContent = formatMs(totalMs);
+
+  if (btnEl) btnEl.textContent = focusTimer.paused ? '▶' : '⏸';
+
+  if (barEl) {
+    const task = Store.tasks().find(t => t.id === focusTimer.taskId);
+    const effortMs = task ? parseEffortMs(task.effort) : null;
+    if (effortMs) {
+      const pct = Math.min(100, totalMs / effortMs * 100);
+      barEl.style.width = pct + '%';
+      barEl.style.background = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#6366f1';
+    }
+  }
+}
 
 function renderTodayView() {
   const el     = document.getElementById('todayView');
@@ -1468,6 +1553,7 @@ function openFocusMode() {
 }
 
 function closeFocusMode() {
+  stopFocusTimer(true);
   document.getElementById('focusModeOverlay').classList.add('hidden');
   renderAll();
 }
@@ -1524,6 +1610,20 @@ function renderFocusMode(index) {
           <span class="task-tag status">${task.status}</span>
         </div>
         ${task.notes ? `<div class="focus-card-notes">${escHtml(task.notes)}</div>` : ''}
+
+        <div class="focus-timer">
+          <div class="focus-timer-row">
+            <span class="focus-timer-elapsed" id="focusTimerElapsed">00:00</span>
+            ${parseEffortMs(task.effort)
+              ? `<span class="focus-timer-sep">/</span><span class="focus-timer-estimate">${formatMs(parseEffortMs(task.effort))}</span>`
+              : ''}
+            <button class="focus-timer-pause" id="focusPauseBtn" title="Pause / Resume">⏸</button>
+          </div>
+          ${parseEffortMs(task.effort) ? `
+          <div class="focus-timer-track">
+            <div class="focus-timer-bar" id="focusTimerBar"></div>
+          </div>` : ''}
+        </div>
       </div>
 
       <div class="focus-actions">
@@ -1543,21 +1643,30 @@ function renderFocusMode(index) {
         </div>` : ''}
     </div>`;
 
+  // Start timer for this task (loads existing timeSpent as base)
+  startFocusTimer(task.id);
+
   overlay.querySelector('#focusExitBtn').addEventListener('click', closeFocusMode);
 
+  overlay.querySelector('#focusPauseBtn').addEventListener('click', () => {
+    focusTimer.paused ? resumeFocusTimer() : pauseFocusTimer();
+  });
+
   overlay.querySelector('#focusDoneBtn').addEventListener('click', () => {
+    stopFocusTimer(true);
     toggleTaskDone(task.id);
     focusState.doneIds.push(task.id);
-    renderFocusMode(i); // active list shrinks, same index lands on next task
+    renderFocusMode(i);
   });
 
   overlay.querySelector('#focusSkipBtn').addEventListener('click', () => {
-    // Move current task to end of queue
+    stopFocusTimer(true);
     focusState.queue = [...focusState.queue.filter(id => id !== task.id), task.id];
-    renderFocusMode(i); // same index, next task is now at position i
+    renderFocusMode(i);
   });
 
   overlay.querySelector('#focusEditBtn').addEventListener('click', () => {
+    stopFocusTimer(true);
     closeFocusMode();
     openTaskModal(task.id);
   });
