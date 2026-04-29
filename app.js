@@ -2897,7 +2897,8 @@ init();
   let _fbUser        = null;
   let _syncTimer     = null;
   let _suppressSync  = false;
-  const LOCAL_TS_KEY = 'gtd_local_updated_at';
+  const LOCAL_TS_KEY      = 'gtd_local_updated_at';
+  const LAST_PUSH_TS_KEY  = 'gtd_last_push_at';
 
   // Reassign the stub so Store.save* methods trigger real syncs
   scheduleSync = function () {
@@ -2925,6 +2926,7 @@ init();
         }),
         timeout,
       ]);
+      localStorage.setItem(LAST_PUSH_TS_KEY, Date.now().toString());
       setSyncLabel('saved');
     } catch (e) {
       console.error('Sync error', e);
@@ -2939,11 +2941,15 @@ init();
       if (!snap.exists) return false;
       const d = snap.data();
 
-      // Only overwrite local data if cloud is strictly newer
-      const cloudTs = d.updatedAt?.toMillis?.() || 0;
-      const localTs = parseInt(localStorage.getItem(LOCAL_TS_KEY) || '0', 10);
-      if (localTs > cloudTs) {
-        // Local is newer — push it up instead of overwriting it
+      // Only prefer local if this device has previously pushed to cloud AND
+      // has new local changes since that last push. A device that has never
+      // pushed (lastPushTs=0) always pulls — prevents seed/stale data winning.
+      const cloudTs    = d.updatedAt?.toMillis?.() || 0;
+      const localTs    = parseInt(localStorage.getItem(LOCAL_TS_KEY)     || '0', 10);
+      const lastPushTs = parseInt(localStorage.getItem(LAST_PUSH_TS_KEY) || '0', 10);
+
+      if (lastPushTs > 0 && localTs > lastPushTs) {
+        // Unpushed local changes exist — push them up
         await pushToCloud();
         return true;
       }
