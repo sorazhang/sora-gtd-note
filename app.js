@@ -2968,6 +2968,39 @@ init();
     }
   }
 
+  async function manualSync() {
+    if (!_fbUser) return;
+    setSyncLabel('syncing');
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000));
+    try {
+      const snap = await Promise.race([
+        db.collection('users').doc(_fbUser.uid).get(),
+        timeout,
+      ]);
+      const cloudTs    = snap.exists ? (snap.data().updatedAt?.toMillis?.() || 0) : 0;
+      const localTs    = parseInt(localStorage.getItem(LOCAL_TS_KEY)     || '0', 10);
+      const lastPushTs = parseInt(localStorage.getItem(LAST_PUSH_TS_KEY) || '0', 10);
+
+      if (!snap.exists || (lastPushTs > 0 && localTs > lastPushTs)) {
+        await pushToCloud();
+      } else {
+        // Pull from cloud
+        const d = snap.data();
+        _suppressSync = true;
+        if (d.tasks     !== undefined) Store.saveTasks(d.tasks);
+        if (d.projects  !== undefined) Store.saveProjects(d.projects);
+        if (d.weekNotes !== undefined) Store.saveWeekNotes(d.weekNotes);
+        if (d.uiState   !== undefined) Store.saveUIState(d.uiState);
+        _suppressSync = false;
+        renderAll();
+        setSyncLabel('saved');
+      }
+    } catch (e) {
+      console.error('Manual sync error', e);
+      setSyncLabel('error', e.code || e.message);
+    }
+  }
+
   function setSyncLabel(status, detail) {
     const el = document.getElementById('syncLabel');
     if (!el) return;
@@ -2989,10 +3022,12 @@ init();
     if (user) {
       wrap.innerHTML = `
         <span id="syncLabel" class="sync-label"></span>
+        <button class="btn-sync-manual" id="manualSyncBtn" title="Sync now">↻</button>
         ${user.photoURL
           ? `<img class="auth-avatar" src="${user.photoURL}" title="${escHtml(user.displayName || user.email)}">`
           : `<span class="auth-initials">${(user.displayName || user.email || '?')[0].toUpperCase()}</span>`}
         <button class="btn-secondary btn-sm" id="signOutBtn">Sign out</button>`;
+      document.getElementById('manualSyncBtn').addEventListener('click', manualSync);
       document.getElementById('signOutBtn').addEventListener('click', () => auth.signOut());
     } else {
       wrap.innerHTML = `<button class="btn-sync" id="signInBtn">☁ Sign in to sync</button><span id="signInError" class="sign-in-error"></span>`;

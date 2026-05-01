@@ -172,6 +172,20 @@ body {
   white-space: nowrap;
 }
 .btn-sync:hover { background: rgba(255,255,255,.15); color: #fff; }
+.btn-sync-manual {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.75);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, transform .3s;
+  flex-shrink: 0;
+}
+.btn-sync-manual:hover { background: rgba(255,255,255,.15); color: #fff; }
+.btn-sync-manual:active { transform: rotate(180deg); }
 .sign-in-error { font-size: 10px; color: #fca5a5; max-width: 200px; }
 .btn-sm { padding: 4px 10px !important; font-size: 11px !important; }
 
