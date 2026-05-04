@@ -2229,19 +2229,16 @@ function showTaskDetail(taskId) {
 
 function renderTaskDetailPanel(task, proj) {
   const el = document.getElementById('taskDetailView');
+  const projects = Store.projects();
 
-  const effortMs = parseEffortMs(task.effort);
-  const timeSpentStr = formatTimeSpent(task.timeSpent) || '—';
-  const remainStr = calcRemainEffort(task.effort, task.progress) || '—';
+  const projOptions = projects.map(p =>
+    `<option value="${p.id}"${task.project === p.id ? ' selected' : ''}>${escHtml(p.name)}</option>`
+  ).join('');
 
-  const log = task.activityLog && task.activityLog.length
+  const logHtml = task.activityLog && task.activityLog.length
     ? task.activityLog.slice().reverse().map(e => {
-        const d = new Date(e.at);
-        const ds = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-        return `<div class="td-log-entry">
-          <span class="td-log-date">${ds}</span>
-          <span class="td-log-arrow">W${e.from.week}·${e.from.year} → W${e.to.week}·${e.to.year}</span>
-        </div>`;
+        const ds = new Date(e.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        return `<div class="td-log-entry"><span class="td-log-date">${ds}</span><span class="td-log-arrow">W${e.from.week}·${e.from.year} → W${e.to.week}·${e.to.year}</span></div>`;
       }).join('')
     : '<span class="td-empty">No week changes recorded.</span>';
 
@@ -2250,64 +2247,182 @@ function renderTaskDetailPanel(task, proj) {
       <div class="td-toolbar">
         <button class="td-back-btn" id="tdBackBtn">← Back</button>
         <div class="td-toolbar-right">
+          <span class="td-save-indicator" id="tdSaveIndicator"></span>
           ${task.status !== 'done'
             ? `<button class="td-done-btn" id="tdDoneBtn">✓ Mark Done</button>`
             : `<button class="td-done-btn td-undone-btn" id="tdDoneBtn">↩ Mark Undone</button>`}
-          <button class="td-edit-btn" id="tdEditBtn">✎ Edit</button>
         </div>
       </div>
 
-      <h2 class="td-title">${escHtml(task.title)}</h2>
+      <input class="td-title-input" id="tdFieldTitle" value="${escHtml(task.title)}" placeholder="Task title">
 
-      <div class="td-chips">
-        <span class="task-tag priority-${task.priority}">${task.priority}</span>
-        <span class="task-tag status">${task.category}</span>
-        ${task.execStatus ? `<span class="exec-status-badge es-${task.execStatus}">${task.execStatus.toUpperCase()}</span>` : ''}
-        ${task.status === 'done' ? `<span class="task-tag" style="background:#d1fae5;color:#065f46">done</span>` : ''}
-        ${task.delegated ? `<span class="task-tag context">⇢ ${escHtml(task.delegated)}</span>` : ''}
-        ${task.context ? `<span class="task-tag context">${escHtml(task.context)}</span>` : ''}
+      <div class="td-form-grid">
+        <div class="td-field">
+          <div class="td-label">Category</div>
+          <select class="td-select" id="tdFieldCategory">
+            <option value="personal"${task.category==='personal'?' selected':''}>Personal</option>
+            <option value="work"${task.category==='work'?' selected':''}>Work</option>
+          </select>
+        </div>
+        <div class="td-field">
+          <div class="td-label">Priority</div>
+          <select class="td-select" id="tdFieldPriority">
+            <option value="high"${task.priority==='high'?' selected':''}>High</option>
+            <option value="medium"${task.priority==='medium'?' selected':''}>Medium</option>
+            <option value="low"${task.priority==='low'?' selected':''}>Low</option>
+          </select>
+        </div>
+        <div class="td-field">
+          <div class="td-label">GTD Status</div>
+          <select class="td-select" id="tdFieldStatus">
+            <option value="inbox"${task.status==='inbox'?' selected':''}>Inbox</option>
+            <option value="next"${task.status==='next'?' selected':''}>Next Action</option>
+            <option value="waiting"${task.status==='waiting'?' selected':''}>Waiting For</option>
+            <option value="someday"${task.status==='someday'?' selected':''}>Someday</option>
+            <option value="done"${task.status==='done'?' selected':''}>Done</option>
+          </select>
+        </div>
+        <div class="td-field">
+          <div class="td-label">Status</div>
+          <select class="td-select" id="tdFieldExecStatus">
+            <option value=""${!task.execStatus?' selected':''}>— No status —</option>
+            <option value="todo"${task.execStatus==='todo'?' selected':''}>Todo</option>
+            <option value="wip"${task.execStatus==='wip'?' selected':''}>WIP</option>
+            <option value="done"${task.execStatus==='done'?' selected':''}>Done</option>
+          </select>
+        </div>
+        <div class="td-field td-full">
+          <div class="td-label">Project</div>
+          <select class="td-select" id="tdFieldProject">
+            <option value=""${!task.project?' selected':''}>No Project</option>
+            ${projOptions}
+          </select>
+        </div>
+        <div class="td-field">
+          <div class="td-label">Week</div>
+          <input class="td-input" id="tdFieldWeek" type="number" min="1" max="53" value="${task.week || ''}">
+        </div>
+        <div class="td-field">
+          <div class="td-label">Year</div>
+          <input class="td-input" id="tdFieldYear" type="number" value="${task.year || ''}">
+        </div>
+        <div class="td-field td-full">
+          <div class="td-label">Specific Day</div>
+          <input class="td-input" id="tdFieldDay" type="date" value="${task.day || ''}">
+        </div>
+        <div class="td-field">
+          <div class="td-label">Effort</div>
+          <select class="td-select" id="tdFieldEffort">
+            <option value="TBD"${task.effort==='TBD'?' selected':''}>TBD</option>
+            <option value="10min"${task.effort==='10min'?' selected':''}>10 min</option>
+            <option value="20min"${task.effort==='20min'?' selected':''}>20 min</option>
+            <option value="60min"${task.effort==='60min'?' selected':''}>60 min</option>
+            <option value="90min"${task.effort==='90min'?' selected':''}>90 min</option>
+            <option value="120min"${task.effort==='120min'?' selected':''}>120 min</option>
+          </select>
+        </div>
+        <div class="td-field">
+          <div class="td-label">Progress</div>
+          <select class="td-select" id="tdFieldProgress">
+            <option value="0"${task.progress===0?' selected':''}>0%</option>
+            <option value="10"${task.progress===10?' selected':''}>10%</option>
+            <option value="25"${task.progress===25?' selected':''}>25%</option>
+            <option value="50"${task.progress===50?' selected':''}>50%</option>
+            <option value="75"${task.progress===75?' selected':''}>75%</option>
+            <option value="90"${task.progress===90?' selected':''}>90%</option>
+            <option value="100"${task.progress===100?' selected':''}>100% — Done</option>
+          </select>
+        </div>
+        <div class="td-field">
+          <div class="td-label">Remain Effort</div>
+          <div class="td-value-readonly" id="tdFieldRemain">${calcRemainEffort(task.effort, task.progress) || '—'}</div>
+        </div>
+        <div class="td-field">
+          <div class="td-label">Time Spent</div>
+          <div class="td-value-readonly td-timespent">${formatTimeSpent(task.timeSpent) || '—'}</div>
+        </div>
+        <div class="td-field">
+          <div class="td-label">Delegated To</div>
+          <input class="td-input" id="tdFieldDelegated" type="text" value="${escHtml(task.delegated || '')}" placeholder="Name or team…">
+        </div>
+        <div class="td-field">
+          <div class="td-label">Context</div>
+          <input class="td-input" id="tdFieldContext" type="text" value="${escHtml(task.context || '')}" placeholder="@home, @office…">
+        </div>
       </div>
 
-      <div class="td-grid">
-        <div class="td-field"><div class="td-label">GTD Status</div><div class="td-value">${task.status}</div></div>
-        <div class="td-field"><div class="td-label">Project</div><div class="td-value">${proj ? escHtml(proj.name) : '—'}</div></div>
-        <div class="td-field"><div class="td-label">Week</div><div class="td-value">${task.week ? `W${task.week} · ${task.year}` : '—'}</div></div>
-        <div class="td-field"><div class="td-label">Day</div><div class="td-value">${task.day || '—'}</div></div>
-        <div class="td-field"><div class="td-label">Effort</div><div class="td-value">${task.effort || '—'}</div></div>
-        <div class="td-field"><div class="td-label">Progress</div><div class="td-value">${task.progress || 0}%</div></div>
-        <div class="td-field"><div class="td-label">Remain</div><div class="td-value">${remainStr}</div></div>
-        <div class="td-field"><div class="td-label">Time Spent</div><div class="td-value td-timespent">${timeSpentStr}</div></div>
+      <div class="td-field" style="margin-top:12px">
+        <div class="td-label">Notes</div>
+        <textarea class="td-textarea" id="tdFieldNotes" placeholder="Details, links, references…">${escHtml(task.notes || '')}</textarea>
       </div>
 
-      ${task.progress > 0 ? `
-      <div class="td-progress-bar-wrap">
-        <div class="td-progress-bar" style="width:${task.progress}%"></div>
-      </div>` : ''}
-
-      ${task.notes ? `
-      <div class="td-section">
-        <div class="td-section-label">Notes</div>
-        <div class="td-notes">${escHtml(task.notes)}</div>
-      </div>` : ''}
-
-      <div class="td-section">
+      <div class="td-section" style="margin-top:20px">
         <div class="td-section-label">Week Change History</div>
-        <div class="td-log">${log}</div>
+        <div class="td-log" id="tdLogSection">${logHtml}</div>
       </div>
     </div>`;
 
-  document.getElementById('tdBackBtn').addEventListener('click', () => {
+  // Auto-save logic
+  let _saveTimer = null;
+  const indicator = el.querySelector('#tdSaveIndicator');
+  function scheduleDetailSave() {
+    clearTimeout(_saveTimer);
+    if (indicator) { indicator.textContent = 'Unsaved…'; indicator.className = 'td-save-indicator td-unsaved'; }
+    _saveTimer = setTimeout(saveDetailTask, 800);
+  }
+
+  function saveDetailTask() {
+    const title = el.querySelector('#tdFieldTitle').value.trim();
+    if (!title) return;
+    const tasks = Store.allTasks();
+    const idx = tasks.findIndex(t => t.id === task.id);
+    if (idx < 0) return;
+    const old = tasks[idx];
+    const newWeek = parseInt(el.querySelector('#tdFieldWeek').value) || old.week;
+    const newYear = parseInt(el.querySelector('#tdFieldYear').value) || old.year;
+    const log = old.activityLog ? [...old.activityLog] : [];
+    if (old.week !== newWeek || old.year !== newYear) {
+      log.push({ type: 'week-change', from: { week: old.week, year: old.year }, to: { week: newWeek, year: newYear }, at: new Date().toISOString() });
+      el.querySelector('#tdLogSection').innerHTML = log.slice().reverse().map(e => {
+        const ds = new Date(e.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        return `<div class="td-log-entry"><span class="td-log-date">${ds}</span><span class="td-log-arrow">W${e.from.week}·${e.from.year} → W${e.to.week}·${e.to.year}</span></div>`;
+      }).join('');
+    }
+    const newEffort   = el.querySelector('#tdFieldEffort').value;
+    const newProgress = parseInt(el.querySelector('#tdFieldProgress').value) || 0;
+    tasks[idx] = { ...old, title, category: el.querySelector('#tdFieldCategory').value, priority: el.querySelector('#tdFieldPriority').value,
+      status: el.querySelector('#tdFieldStatus').value, execStatus: el.querySelector('#tdFieldExecStatus').value,
+      project: el.querySelector('#tdFieldProject').value, week: newWeek, year: newYear,
+      day: el.querySelector('#tdFieldDay').value || null, effort: newEffort, progress: newProgress,
+      delegated: el.querySelector('#tdFieldDelegated').value.trim(), context: el.querySelector('#tdFieldContext').value.trim(),
+      notes: el.querySelector('#tdFieldNotes').value.trim(), activityLog: log,
+    };
+    Store.saveTasks(tasks);
+    document.getElementById('weekPanelTitle').textContent = title;
+    const remainEl = el.querySelector('#tdFieldRemain');
+    if (remainEl) remainEl.textContent = calcRemainEffort(newEffort, newProgress) || '—';
+    if (indicator) { indicator.textContent = 'Saved ✓'; indicator.className = 'td-save-indicator td-saved'; }
+    task = tasks[idx];
+  }
+
+  el.querySelectorAll('.td-select, .td-input, .td-title-input').forEach(f =>
+    f.addEventListener('change', scheduleDetailSave)
+  );
+  el.querySelector('#tdFieldTitle').addEventListener('input', scheduleDetailSave);
+  el.querySelector('#tdFieldNotes').addEventListener('input', scheduleDetailSave);
+
+  el.querySelector('#tdBackBtn').addEventListener('click', () => {
+    saveDetailTask();
     document.getElementById('taskDetailView').classList.add('hidden');
     state.taskDetailId = null;
     renderRightPanel();
   });
 
-  document.getElementById('tdEditBtn').addEventListener('click', () => openTaskModal(task.id));
-
-  document.getElementById('tdDoneBtn').addEventListener('click', () => {
+  el.querySelector('#tdDoneBtn').addEventListener('click', () => {
+    saveDetailTask();
     toggleTaskDone(task.id);
     const updated = Store.allTasks().find(t => t.id === task.id);
-    if (updated) renderTaskDetailPanel(updated, proj);
+    if (updated) renderTaskDetailPanel(updated, Store.projects().find(p => p.id === updated.project) || null);
   });
 }
 
