@@ -614,7 +614,7 @@ function renderProjectGantt(linked, scroll) {
     const row = document.createElement('div');
     row.className = 'gantt-row';
     row.style.width = totalW + 'px';
-    row.addEventListener('click', () => openTaskModal(task.id));
+    row.addEventListener('click', () => showTaskDetail(task.id));
 
     const label = document.createElement('div');
     label.className = 'gantt-label-col';
@@ -1113,7 +1113,7 @@ function renderBoardView() {
     const n = hitNode(x, y);
     if (!n) return;
     if (n.type === 'project') selectProject(n.id);
-    else openTaskModal(n.id);
+    else showTaskDetail(n.id);
   });
 
   canvas.addEventListener('wheel', e => {
@@ -1296,8 +1296,8 @@ function buildDayPinnedCard(task, idx, allPinned, isCurrent, dk) {
     toggleTaskDone(task.id);
   });
 
-  // Edit on body click
-  wrap.querySelector('.day-seq-body').addEventListener('click', () => openTaskModal(task.id));
+  // View detail on body click
+  wrap.querySelector('.day-seq-body').addEventListener('click', () => showTaskDetail(task.id));
 
   // Reorder up
   const upBtn = wrap.querySelector('.day-seq-btn.up');
@@ -1907,7 +1907,7 @@ function renderWeekKanban() {
             ${t.context ? `<span class="kanban-chip ctx">${escHtml(t.context)}</span>` : ''}
             ${t.progress > 0 ? `<span class="kanban-chip progress">${t.progress}%</span>` : ''}
           </div>`;
-        card.addEventListener('click', () => openTaskModal(t.id));
+        card.addEventListener('click', () => showTaskDetail(t.id));
         body.appendChild(card);
       });
     }
@@ -1980,7 +1980,7 @@ function renderWeekGantt() {
       const row = document.createElement('div');
       row.className = 'gantt-row';
       row.style.width = totalW + 'px';
-      row.addEventListener('click', () => openTaskModal(task.id));
+      row.addEventListener('click', () => showTaskDetail(task.id));
 
       const label = buildGanttLabel(task, LABEL_W);
       row.appendChild(label);
@@ -2010,7 +2010,7 @@ function renderWeekGantt() {
       const row = document.createElement('div');
       row.className = 'gantt-row';
       row.style.width = totalW + 'px';
-      row.addEventListener('click', () => openTaskModal(task.id));
+      row.addEventListener('click', () => showTaskDetail(task.id));
 
       const label = buildGanttLabel(task, LABEL_W);
       row.appendChild(label);
@@ -2188,7 +2188,7 @@ function buildTaskCard(task) {
   body.appendChild(meta);
   card.appendChild(checkEl);
   card.appendChild(body);
-  card.addEventListener('click', () => openTaskModal(task.id));
+  card.addEventListener('click', () => showTaskDetail(task.id));
   return card;
 }
 
@@ -2207,6 +2207,108 @@ function toggleTaskDone(id) {
   }
   Store.saveTasks(tasks);
   renderAll();
+}
+
+// ===== Task Detail Panel =====
+
+function showTaskDetail(taskId) {
+  const task = Store.allTasks().find(t => t.id === taskId);
+  if (!task) return;
+  state.taskDetailId = taskId;
+
+  const allViews = ['dayView','todayView','inboxView','weekView','projectView','boardView','archiveView','taskDetailView'];
+  allViews.forEach(v => document.getElementById(v).classList.add('hidden'));
+  document.getElementById('taskDetailView').classList.remove('hidden');
+
+  const proj = task.project ? Store.projects().find(p => p.id === task.project) : null;
+  document.getElementById('weekPanelTitle').textContent = task.title;
+  document.getElementById('weekPanelDates').textContent = proj ? proj.name : (task.category || '');
+
+  renderTaskDetailPanel(task, proj);
+}
+
+function renderTaskDetailPanel(task, proj) {
+  const el = document.getElementById('taskDetailView');
+
+  const effortMs = parseEffortMs(task.effort);
+  const timeSpentStr = formatTimeSpent(task.timeSpent) || '—';
+  const remainStr = calcRemainEffort(task.effort, task.progress) || '—';
+
+  const log = task.activityLog && task.activityLog.length
+    ? task.activityLog.slice().reverse().map(e => {
+        const d = new Date(e.at);
+        const ds = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        return `<div class="td-log-entry">
+          <span class="td-log-date">${ds}</span>
+          <span class="td-log-arrow">W${e.from.week}·${e.from.year} → W${e.to.week}·${e.to.year}</span>
+        </div>`;
+      }).join('')
+    : '<span class="td-empty">No week changes recorded.</span>';
+
+  el.innerHTML = `
+    <div class="task-detail-panel">
+      <div class="td-toolbar">
+        <button class="td-back-btn" id="tdBackBtn">← Back</button>
+        <div class="td-toolbar-right">
+          ${task.status !== 'done'
+            ? `<button class="td-done-btn" id="tdDoneBtn">✓ Mark Done</button>`
+            : `<button class="td-done-btn td-undone-btn" id="tdDoneBtn">↩ Mark Undone</button>`}
+          <button class="td-edit-btn" id="tdEditBtn">✎ Edit</button>
+        </div>
+      </div>
+
+      <h2 class="td-title">${escHtml(task.title)}</h2>
+
+      <div class="td-chips">
+        <span class="task-tag priority-${task.priority}">${task.priority}</span>
+        <span class="task-tag status">${task.category}</span>
+        ${task.execStatus ? `<span class="exec-status-badge es-${task.execStatus}">${task.execStatus.toUpperCase()}</span>` : ''}
+        ${task.status === 'done' ? `<span class="task-tag" style="background:#d1fae5;color:#065f46">done</span>` : ''}
+        ${task.delegated ? `<span class="task-tag context">⇢ ${escHtml(task.delegated)}</span>` : ''}
+        ${task.context ? `<span class="task-tag context">${escHtml(task.context)}</span>` : ''}
+      </div>
+
+      <div class="td-grid">
+        <div class="td-field"><div class="td-label">GTD Status</div><div class="td-value">${task.status}</div></div>
+        <div class="td-field"><div class="td-label">Project</div><div class="td-value">${proj ? escHtml(proj.name) : '—'}</div></div>
+        <div class="td-field"><div class="td-label">Week</div><div class="td-value">${task.week ? `W${task.week} · ${task.year}` : '—'}</div></div>
+        <div class="td-field"><div class="td-label">Day</div><div class="td-value">${task.day || '—'}</div></div>
+        <div class="td-field"><div class="td-label">Effort</div><div class="td-value">${task.effort || '—'}</div></div>
+        <div class="td-field"><div class="td-label">Progress</div><div class="td-value">${task.progress || 0}%</div></div>
+        <div class="td-field"><div class="td-label">Remain</div><div class="td-value">${remainStr}</div></div>
+        <div class="td-field"><div class="td-label">Time Spent</div><div class="td-value td-timespent">${timeSpentStr}</div></div>
+      </div>
+
+      ${task.progress > 0 ? `
+      <div class="td-progress-bar-wrap">
+        <div class="td-progress-bar" style="width:${task.progress}%"></div>
+      </div>` : ''}
+
+      ${task.notes ? `
+      <div class="td-section">
+        <div class="td-section-label">Notes</div>
+        <div class="td-notes">${escHtml(task.notes)}</div>
+      </div>` : ''}
+
+      <div class="td-section">
+        <div class="td-section-label">Week Change History</div>
+        <div class="td-log">${log}</div>
+      </div>
+    </div>`;
+
+  document.getElementById('tdBackBtn').addEventListener('click', () => {
+    document.getElementById('taskDetailView').classList.add('hidden');
+    state.taskDetailId = null;
+    renderRightPanel();
+  });
+
+  document.getElementById('tdEditBtn').addEventListener('click', () => openTaskModal(task.id));
+
+  document.getElementById('tdDoneBtn').addEventListener('click', () => {
+    toggleTaskDone(task.id);
+    const updated = Store.allTasks().find(t => t.id === task.id);
+    if (updated) renderTaskDetailPanel(updated, proj);
+  });
 }
 
 // ===== Task Modal =====
