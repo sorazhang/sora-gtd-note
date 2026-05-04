@@ -1827,6 +1827,31 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+
+.proj-notes-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.proj-notes-tab {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.proj-notes-tab:hover { background: var(--bg-2); color: var(--text-1); }
+.proj-notes-tab.active {
+  background: var(--bg-2);
+  border-color: var(--border);
+  color: var(--text-1);
+  font-weight: 600;
 }
 
 .proj-notes-label {

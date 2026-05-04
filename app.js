@@ -433,7 +433,11 @@ function renderProjectView() {
       </div>` : ''}
     <div class="proj-notes-section">
       <div class="proj-notes-header">
-        <span class="proj-notes-label">Project Notes</span>
+        <div class="proj-notes-tabs">
+          <button class="proj-notes-tab active" data-notetab="notes">Notes</button>
+          <button class="proj-notes-tab" data-notetab="scope">Scope</button>
+          <button class="proj-notes-tab" data-notetab="timeline">Timeline</button>
+        </div>
         <div style="display:flex;gap:6px;align-items:center">
           <button class="btn-generate" id="projObsidianBtn">📝 Obsidian</button>
           <button class="save-notes-btn" id="projEditBtn">Edit</button>
@@ -485,6 +489,22 @@ function renderProjectView() {
   document.getElementById('projNotesSaveBtn').addEventListener('click', saveProjectNotes);
   document.getElementById('projEditBtn').addEventListener('click', () => openProjectModal(proj.id));
   document.getElementById('projObsidianBtn').addEventListener('click', () => openProjectObsidianModal(proj.id));
+
+  // Project notes tab switching
+  const tabContent = { notes: proj.notes || proj.description || '', scope: proj.scope || '', timeline: proj.timeline || '' };
+  const placeholders = { notes: 'Vision, goals, sequence, key reminders…', scope: 'Define scope, boundaries, and deliverables…', timeline: 'Key milestones, dates, and phases…' };
+  let activeNoteTab = 'notes';
+  el.querySelectorAll('.proj-notes-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Save current tab content before switching
+      tabContent[activeNoteTab] = document.getElementById('projNotesTextarea').value;
+      activeNoteTab = tab.dataset.notetab;
+      el.querySelectorAll('.proj-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
+      const ta = document.getElementById('projNotesTextarea');
+      ta.value = tabContent[activeNoteTab];
+      ta.placeholder = placeholders[activeNoteTab];
+    });
+  });
   document.getElementById('projAddTaskBtn').addEventListener('click', () => openTaskModal(null, { project: proj.id }));
   document.getElementById('projAddChildBtn').addEventListener('click', () => {
     openProjectModal(null);
@@ -657,11 +677,16 @@ function renderProjectGantt(linked, scroll) {
 }
 
 function saveProjectNotes() {
-  const text = document.getElementById('projNotesTextarea').value;
   const projects = Store.projects();
   const idx = projects.findIndex(p => p.id === state.selectedProjectId);
   if (idx === -1) return;
-  projects[idx].notes = text;
+  // Determine active tab by which tab has the 'active' class
+  const activeTab = document.querySelector('.proj-notes-tab.active');
+  const field = activeTab ? activeTab.dataset.notetab : 'notes';
+  const text = document.getElementById('projNotesTextarea').value;
+  if (field === 'notes') projects[idx].notes = text;
+  else if (field === 'scope') projects[idx].scope = text;
+  else if (field === 'timeline') projects[idx].timeline = text;
   Store.saveProjects(projects);
   const btn = document.getElementById('projNotesSaveBtn');
   btn.textContent = 'Saved ✓';
