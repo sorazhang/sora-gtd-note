@@ -2470,6 +2470,11 @@ body {
   padding: 20px 24px 40px;
   max-width: 100%;
 }
+#taskDetailView {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
 .td-toolbar {
   display: flex;
   align-items: center;
