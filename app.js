@@ -509,6 +509,7 @@ function renderProjectView() {
     const ta = document.getElementById('projNotesTextarea');
     const summaryPanel = document.getElementById('projSummaryPanel');
     const saveBtn = document.getElementById('projNotesSaveBtn');
+    el.querySelector('.proj-notes-section').classList.toggle('summary-active', isSummary);
     if (isSummary) {
       ta.classList.add('hidden');
       summaryPanel.classList.remove('hidden');
