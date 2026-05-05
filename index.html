@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GTD Note System</title>
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
   <div class="app-container">
@@ -130,11 +130,18 @@
         <div id="weekView">
           <div class="week-notes-section">
             <div class="week-notes-header">
-              <span>Week Notes</span>
+              <div class="week-notes-tabs">
+                <button class="week-notes-tab active" data-wntab="notes">Notes</button>
+                <button class="week-notes-tab" data-wntab="summary">✨ Summary</button>
+              </div>
               <button class="save-notes-btn" id="saveNotesBtn">Save</button>
             </div>
             <textarea class="week-notes-textarea" id="weekNotesTextarea"
               placeholder="Reflections, blockers, learnings…"></textarea>
+            <div id="weekSummaryPanel" class="proj-summary-panel hidden">
+              <button class="btn-generate-summary" id="weekGenerateBtn">✨ Generate Summary</button>
+              <div class="proj-summary-output hidden" id="weekSummaryOutput"></div>
+            </div>
           </div>
 
           <div class="week-view-toolbar">
@@ -379,6 +386,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=25"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

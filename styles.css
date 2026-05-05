@@ -766,6 +766,8 @@ body {
   border-bottom: 1px solid var(--border);
   padding: 12px;
   flex-shrink: 0;
+  max-height: 340px;
+  overflow-y: auto;
 }
 
 /* Week view toolbar (tab bar + list/gantt toggle) */
@@ -938,8 +940,27 @@ body {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-2);
+  letter-spacing: .06em;
+}
+.week-notes-tabs { display: flex; gap: 2px; }
+.week-notes-tab {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
   text-transform: uppercase;
   letter-spacing: .06em;
+  transition: background .15s, color .15s;
+}
+.week-notes-tab:hover { background: var(--bg-2); color: var(--text-1); }
+.week-notes-tab.active {
+  background: var(--bg-2);
+  border-color: var(--border);
+  color: var(--text-1);
 }
 
 .save-notes-btn {

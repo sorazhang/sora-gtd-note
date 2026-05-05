@@ -757,6 +757,43 @@ function saveProjectNotes() {
   setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
 }
 
+function buildWeekSummaryPrompt(week, year, start, end, notesText, tasks) {
+  const pending   = tasks.filter(t => t.status !== 'done');
+  const completed = tasks.filter(t => t.status === 'done');
+
+  const taskList = tasks.map(t =>
+    `- [${t.status === 'done' ? 'DONE' : 'PENDING'}] ${t.title}${t.delegated ? ' (owner: ' + t.delegated + ')' : ''}${t.day ? ' due ' + t.day : ''}`
+  ).join('\n') || '(no tasks this week)';
+
+  return `You are analyzing agile standup notes from a sprint week for a GTD productivity tool.
+
+Week ${week} · ${year} (${start.toLocaleDateString()} – ${end.toLocaleDateString()})
+
+Raw standup notes for this week:
+"""
+${notesText || '(no notes recorded)'}
+"""
+
+Tasks planned for this week (${tasks.length} total, ${completed.length} done):
+${taskList}
+
+Analyze the standup notes and generate a sprint week summary with exactly these sections (## headers):
+
+## Task Progress Summary
+For each task mentioned in the standup notes: summarize its progress, who mentioned it, how many times it came up across standups, and any blockers. If a task appears multiple times, highlight that frequency — it indicates either importance or a recurring blocker.
+
+## Team Member Updates
+Summarize each person's reported progress (if names appear in the notes).
+
+## Blockers & Risks
+List any blockers, dependencies, or risks raised during standups.
+
+## Sprint Health
+One short paragraph assessing overall sprint progress based on the notes and task completion rate.
+
+Be concise. Use markdown bullet points. If the notes don't mention something, skip that subsection rather than guessing.`;
+}
+
 function buildSummaryPrompt(proj, tasks) {
   const pending   = tasks.filter(t => t.status !== 'done');
   const completed = tasks.filter(t => t.status === 'done');
@@ -1954,8 +1991,61 @@ function renderWeekPanel() {
   document.getElementById('weekPanelDates').textContent =
     `${formatDateShort(start)} – ${formatDateShort(end)}, ${y}`;
 
+  const weekKey = `${y}-W${w}`;
   const notes = Store.weekNotes();
-  document.getElementById('weekNotesTextarea').value = notes[`${y}-W${w}`] || '';
+  document.getElementById('weekNotesTextarea').value = notes[weekKey] || '';
+
+  // Reset to Notes tab each time a new week is selected
+  document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t.dataset.wntab === 'notes'));
+  document.getElementById('weekNotesTextarea').classList.remove('hidden');
+  document.getElementById('weekSummaryPanel').classList.add('hidden');
+  document.getElementById('saveNotesBtn').classList.remove('hidden');
+
+  // Week notes tabs
+  document.querySelectorAll('.week-notes-tab').forEach(tab => {
+    tab.onclick = null; // reset before re-binding
+    tab.addEventListener('click', () => {
+      const isSummary = tab.dataset.wntab === 'summary';
+      document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.getElementById('weekNotesTextarea').classList.toggle('hidden', isSummary);
+      document.getElementById('weekSummaryPanel').classList.toggle('hidden', !isSummary);
+      document.getElementById('saveNotesBtn').classList.toggle('hidden', isSummary);
+      if (isSummary) {
+        const existing = Store.weekNotes()[`${weekKey}-summary`];
+        if (existing) showWeekSummary(existing);
+      }
+    });
+  });
+
+  // Generate button
+  document.getElementById('weekGenerateBtn').onclick = async () => {
+    const btn = document.getElementById('weekGenerateBtn');
+    const out = document.getElementById('weekSummaryOutput');
+    btn.disabled = true; btn.textContent = '✨ Generating…';
+    out.classList.add('hidden');
+    try {
+      const weekNoteText = Store.weekNotes()[weekKey] || '';
+      const weekTasks = Store.tasks().filter(t => t.week === w && t.year === y && !t.archived);
+      const prompt = buildWeekSummaryPrompt(w, y, start, end, weekNoteText, weekTasks);
+      const res = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      const allNotes = Store.weekNotes();
+      allNotes[`${weekKey}-summary`] = data.summary;
+      Store.saveWeekNotes(allNotes);
+      showWeekSummary(data.summary);
+    } catch (e) {
+      const out2 = document.getElementById('weekSummaryOutput');
+      out2.innerHTML = `<span style="color:#ef4444">Error: ${escHtml(e.message)}</span>`;
+      out2.classList.remove('hidden');
+    } finally {
+      btn.disabled = false; btn.textContent = '↻ Regenerate';
+    }
+  };
 
   // Sync toggle button state
   const mode = state.weekViewMode;
@@ -1965,7 +2055,6 @@ function renderWeekPanel() {
   document.getElementById('weekListView').classList.toggle('hidden',   mode !== 'list');
   document.getElementById('weekKanbanView').classList.toggle('hidden', mode !== 'kanban');
   document.getElementById('weekGanttView').classList.toggle('hidden',  mode !== 'gantt');
-  // Tab bar hidden in Gantt mode only
   document.getElementById('weekTabBar').style.display = mode === 'gantt' ? 'none' : '';
 
   if (mode === 'gantt') {
@@ -1975,6 +2064,13 @@ function renderWeekPanel() {
   } else {
     renderWeekTasks();
   }
+}
+
+function showWeekSummary(text) {
+  const out = document.getElementById('weekSummaryOutput');
+  out.innerHTML = renderMarkdownSimple(text);
+  out.classList.remove('hidden');
+  document.getElementById('weekGenerateBtn').textContent = '↻ Regenerate';
 }
 
 function renderWeekTasks() {
