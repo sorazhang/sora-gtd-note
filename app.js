@@ -437,6 +437,7 @@ function renderProjectView() {
           <button class="proj-notes-tab active" data-notetab="notes">Notes</button>
           <button class="proj-notes-tab" data-notetab="scope">Scope</button>
           <button class="proj-notes-tab" data-notetab="timeline">Timeline</button>
+          <button class="proj-notes-tab" data-notetab="summary">✨ Summary</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           <button class="btn-generate" id="projObsidianBtn">📝 Obsidian</button>
@@ -446,6 +447,10 @@ function renderProjectView() {
       </div>
       <textarea class="proj-notes-textarea" id="projNotesTextarea"
         placeholder="Vision, goals, sequence, key reminders…">${escHtml(proj.notes || proj.description || '')}</textarea>
+      <div id="projSummaryPanel" class="proj-summary-panel hidden">
+        <button class="btn-generate-summary" id="projGenerateBtn">✨ Generate Summary</button>
+        <div class="proj-summary-output hidden" id="projSummaryOutput"></div>
+      </div>
     </div>
     ${children.length > 0 ? `
       <div class="proj-sub-section">
@@ -494,16 +499,74 @@ function renderProjectView() {
   const tabContent = { notes: proj.notes || proj.description || '', scope: proj.scope || '', timeline: proj.timeline || '' };
   const placeholders = { notes: 'Vision, goals, sequence, key reminders…', scope: 'Define scope, boundaries, and deliverables…', timeline: 'Key milestones, dates, and phases…' };
   let activeNoteTab = 'notes';
-  el.querySelectorAll('.proj-notes-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      // Save current tab content before switching
-      tabContent[activeNoteTab] = document.getElementById('projNotesTextarea').value;
-      activeNoteTab = tab.dataset.notetab;
-      el.querySelectorAll('.proj-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
-      const ta = document.getElementById('projNotesTextarea');
+
+  function switchNoteTab(tab) {
+    const isSummary = tab.dataset.notetab === 'summary';
+    const wasSummary = activeNoteTab === 'summary';
+    if (!wasSummary) tabContent[activeNoteTab] = document.getElementById('projNotesTextarea').value;
+    activeNoteTab = tab.dataset.notetab;
+    el.querySelectorAll('.proj-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
+    const ta = document.getElementById('projNotesTextarea');
+    const summaryPanel = document.getElementById('projSummaryPanel');
+    const saveBtn = document.getElementById('projNotesSaveBtn');
+    if (isSummary) {
+      ta.classList.add('hidden');
+      summaryPanel.classList.remove('hidden');
+      saveBtn.classList.add('hidden');
+      // Show existing summary if available
+      const projects = Store.projects();
+      const p = projects.find(x => x.id === state.selectedProjectId);
+      if (p && p.summary) showSummaryContent(p.summary);
+    } else {
+      ta.classList.remove('hidden');
+      summaryPanel.classList.add('hidden');
+      saveBtn.classList.remove('hidden');
       ta.value = tabContent[activeNoteTab];
       ta.placeholder = placeholders[activeNoteTab];
-    });
+    }
+  }
+
+  el.querySelectorAll('.proj-notes-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchNoteTab(tab));
+  });
+
+  function showSummaryContent(text) {
+    const out = document.getElementById('projSummaryOutput');
+    out.innerHTML = renderMarkdownSimple(text);
+    out.classList.remove('hidden');
+    const btn = document.getElementById('projGenerateBtn');
+    btn.textContent = '↻ Regenerate';
+  }
+
+  document.getElementById('projGenerateBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('projGenerateBtn');
+    const out = document.getElementById('projSummaryOutput');
+    btn.disabled = true;
+    btn.textContent = '✨ Generating…';
+    out.classList.add('hidden');
+    try {
+      const projects = Store.projects();
+      const p = projects.find(x => x.id === state.selectedProjectId);
+      const prompt = buildSummaryPrompt(p, Store.tasks().filter(t => t.project === p.id && !t.archived));
+      const res = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      // Save to project
+      const idx = projects.findIndex(x => x.id === p.id);
+      projects[idx].summary = data.summary;
+      Store.saveProjects(projects);
+      showSummaryContent(data.summary);
+    } catch (e) {
+      out.innerHTML = `<span style="color:#ef4444">Error: ${escHtml(e.message)}</span>`;
+      out.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '↻ Regenerate';
+    }
   });
   document.getElementById('projAddTaskBtn').addEventListener('click', () => openTaskModal(null, { project: proj.id }));
   document.getElementById('projAddChildBtn').addEventListener('click', () => {
@@ -691,6 +754,70 @@ function saveProjectNotes() {
   const btn = document.getElementById('projNotesSaveBtn');
   btn.textContent = 'Saved ✓';
   setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
+}
+
+function buildSummaryPrompt(proj, tasks) {
+  const pending   = tasks.filter(t => t.status !== 'done');
+  const completed = tasks.filter(t => t.status === 'done');
+
+  const pendingLines = pending.map(t => {
+    const due = t.day ? `due ${t.day}` : (t.week ? `W${t.week}·${t.year}` : 'no date');
+    return `- ${t.title} [${t.priority}] (${due})${t.notes ? ' — ' + t.notes : ''}`;
+  }).join('\n') || '(none)';
+
+  const completedLines = completed.slice(0, 30).map(t =>
+    `- ${t.title}${t.completedAt ? ' (' + new Date(t.completedAt).toLocaleDateString() + ')' : ''}`
+  ).join('\n') || '(none)';
+
+  return `You are summarizing a project inside a GTD productivity app. Be concise and practical.
+
+Project: ${proj.name}
+Type: ${proj.type} | Status: ${proj.status}
+
+Notes:
+${proj.notes || '(none)'}
+
+Scope:
+${proj.scope || '(none)'}
+
+Timeline:
+${proj.timeline || '(none)'}
+
+Pending tasks (${pending.length}):
+${pendingLines}
+
+Completed tasks (${completed.length}):
+${completedLines}
+
+Generate a project summary with exactly these sections (use ## headers):
+## Pending Tasks & Due Dates
+List pending tasks grouped by week or urgency.
+
+## Completed Tasks
+Brief summary of what has been accomplished.
+
+## References & Links
+Extract any URLs, SharePoint links, file paths, or tools mentioned anywhere above. If none, write "(none found)".
+
+## Risks
+Identify risks, blockers, or concerns mentioned or implied. If none, write "(none identified)".
+
+Keep each section concise. Use markdown bullet points.`;
+}
+
+function renderMarkdownSimple(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^## (.+)$/gm, '<h4 class="md-h2">$1</h4>')
+    .replace(/^### (.+)$/gm, '<strong class="md-h3">$1</strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)(\n<li>|$)/g, (_, li) => li)
+    .replace(/((<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+    .replace(/\n\n/g, '<br>')
+    .replace(/^(?!<[hul]|<br)(.+)$/gm, '<p>$1</p>');
 }
 
 // ===== Archive View =====
