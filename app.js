@@ -757,41 +757,50 @@ function saveProjectNotes() {
   setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
 }
 
-function buildWeekSummaryPrompt(week, year, start, end, notesText, tasks) {
-  const pending   = tasks.filter(t => t.status !== 'done');
-  const completed = tasks.filter(t => t.status === 'done');
+function buildWeekSummaryPrompt(week, year, start, end, notesText, startedTasks, allWeekTasks) {
+  const completed = allWeekTasks.filter(t => t.status === 'done');
 
-  const taskList = tasks.map(t =>
-    `- [${t.status === 'done' ? 'DONE' : 'PENDING'}] ${t.title}${t.delegated ? ' (owner: ' + t.delegated + ')' : ''}${t.day ? ' due ' + t.day : ''}`
-  ).join('\n') || '(no tasks this week)';
+  const startedList = startedTasks.map(t =>
+    `- [${t.execStatus === 'wip' ? 'WIP' : t.status.toUpperCase()}] ${t.title}` +
+    `${t.delegated ? ' (owner: ' + t.delegated + ')' : ''}` +
+    `${t.day ? ' · due ' + t.day : ''}` +
+    `${t.notes ? ' · note: ' + t.notes : ''}`
+  ).join('\n') || '(no started tasks this week)';
 
-  return `You are analyzing agile standup notes from a sprint week for a GTD productivity tool.
+  const completedList = completed.map(t =>
+    `- ${t.title}${t.completedAt ? ' (done ' + new Date(t.completedAt).toLocaleDateString() + ')' : ''}`
+  ).join('\n') || '(none)';
+
+  return `You are analyzing agile standup notes for a sprint week. Focus specifically on the started/in-progress tasks listed below and cross-reference them with the standup notes.
 
 Week ${week} · ${year} (${start.toLocaleDateString()} – ${end.toLocaleDateString()})
 
-Raw standup notes for this week:
+Standup notes for this week:
 """
-${notesText || '(no notes recorded)'}
+${notesText || '(no standup notes recorded — base summary on task list only)'}
 """
 
-Tasks planned for this week (${tasks.length} total, ${completed.length} done):
-${taskList}
+In-progress / started tasks this week (${startedTasks.length}):
+${startedList}
 
-Analyze the standup notes and generate a sprint week summary with exactly these sections (## headers):
+Completed tasks this week (${completed.length}):
+${completedList}
+
+Generate a standup summary with exactly these sections (## headers):
 
 ## Task Progress Summary
-For each task mentioned in the standup notes: summarize its progress, who mentioned it, how many times it came up across standups, and any blockers. If a task appears multiple times, highlight that frequency — it indicates either importance or a recurring blocker.
+For each started task: what progress was reported in standup notes, who mentioned it, and how many times it was referenced. Tasks mentioned multiple times likely have blockers or are high-priority — call that out.
 
 ## Team Member Updates
-Summarize each person's reported progress (if names appear in the notes).
+What each person reported across standups (only if names appear in the notes).
 
 ## Blockers & Risks
-List any blockers, dependencies, or risks raised during standups.
+Any blockers, dependencies, or concerns raised during standups.
 
 ## Sprint Health
-One short paragraph assessing overall sprint progress based on the notes and task completion rate.
+One short paragraph on overall sprint progress based on task completion rate and standup sentiment.
 
-Be concise. Use markdown bullet points. If the notes don't mention something, skip that subsection rather than guessing.`;
+Be concise. Bullet points. Skip a section entirely if the notes contain no relevant information for it.`;
 }
 
 function buildSummaryPrompt(proj, tasks) {
@@ -2001,32 +2010,22 @@ function renderWeekPanel() {
   document.getElementById('weekSummaryPanel').classList.add('hidden');
   document.getElementById('saveNotesBtn').classList.remove('hidden');
 
-  // Week notes tabs
-  document.querySelectorAll('.week-notes-tab').forEach(tab => {
-    tab.onclick = null; // reset before re-binding
-    tab.addEventListener('click', () => {
-      const isSummary = tab.dataset.wntab === 'summary';
-      document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
-      document.getElementById('weekNotesTextarea').classList.toggle('hidden', isSummary);
-      document.getElementById('weekSummaryPanel').classList.toggle('hidden', !isSummary);
-      document.getElementById('saveNotesBtn').classList.toggle('hidden', isSummary);
-      if (isSummary) {
-        const existing = Store.weekNotes()[`${weekKey}-summary`];
-        if (existing) showWeekSummary(existing);
-      }
-    });
-  });
-
-  // Generate button
-  document.getElementById('weekGenerateBtn').onclick = async () => {
+  // Shared generate function
+  async function generateWeekSummary() {
     const btn = document.getElementById('weekGenerateBtn');
     const out = document.getElementById('weekSummaryOutput');
     btn.disabled = true; btn.textContent = '✨ Generating…';
     out.classList.add('hidden');
     try {
       const weekNoteText = Store.weekNotes()[weekKey] || '';
-      const weekTasks = Store.tasks().filter(t => t.week === w && t.year === y && !t.archived);
-      const prompt = buildWeekSummaryPrompt(w, y, start, end, weekNoteText, weekTasks);
+      const allTasks = Store.tasks().filter(t => !t.archived);
+      // Started tasks: WIP or next-action in this week
+      const startedTasks = allTasks.filter(t =>
+        t.week === w && t.year === y && (t.execStatus === 'wip' || t.status === 'next' || t.status === 'waiting')
+      );
+      // Also include all week tasks for context
+      const weekTasks = allTasks.filter(t => t.week === w && t.year === y);
+      const prompt = buildWeekSummaryPrompt(w, y, start, end, weekNoteText, startedTasks, weekTasks);
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2045,7 +2044,30 @@ function renderWeekPanel() {
     } finally {
       btn.disabled = false; btn.textContent = '↻ Regenerate';
     }
-  };
+  }
+
+  // Week notes tabs
+  document.querySelectorAll('.week-notes-tab').forEach(tab => {
+    tab.onclick = null;
+    tab.addEventListener('click', () => {
+      const isSummary = tab.dataset.wntab === 'summary';
+      document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.getElementById('weekNotesTextarea').classList.toggle('hidden', isSummary);
+      document.getElementById('weekSummaryPanel').classList.toggle('hidden', !isSummary);
+      document.getElementById('saveNotesBtn').classList.toggle('hidden', isSummary);
+      if (isSummary) {
+        const existing = Store.weekNotes()[`${weekKey}-summary`];
+        if (existing) {
+          showWeekSummary(existing);
+        } else {
+          // Auto-generate when no summary exists yet
+          generateWeekSummary();
+        }
+      }
+    });
+  });
+
+  document.getElementById('weekGenerateBtn').onclick = generateWeekSummary;
 
   // Sync toggle button state
   const mode = state.weekViewMode;
