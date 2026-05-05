@@ -2002,11 +2002,13 @@ function renderWeekPanel() {
 
   const weekKey = `${y}-W${w}`;
   const notes = Store.weekNotes();
-  document.getElementById('weekNotesTextarea').value = notes[weekKey] || '';
+  document.getElementById('weekNotesTextarea').value   = notes[weekKey] || '';
+  document.getElementById('standupNotesTextarea').value = notes[`${weekKey}-standup`] || '';
 
   // Reset to Notes tab each time a new week is selected
   document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t.dataset.wntab === 'notes'));
   document.getElementById('weekNotesTextarea').classList.remove('hidden');
+  document.getElementById('standupNotesTextarea').classList.add('hidden');
   document.getElementById('weekSummaryPanel').classList.add('hidden');
   document.getElementById('saveNotesBtn').classList.remove('hidden');
 
@@ -2017,7 +2019,7 @@ function renderWeekPanel() {
     btn.disabled = true; btn.textContent = '✨ Generating…';
     out.classList.add('hidden');
     try {
-      const weekNoteText = Store.weekNotes()[weekKey] || '';
+      const weekNoteText = Store.weekNotes()[`${weekKey}-standup`] || Store.weekNotes()[weekKey] || '';
       const allTasks = Store.tasks().filter(t => !t.archived);
       // Started tasks: WIP or next-action in this week
       const startedTasks = allTasks.filter(t =>
@@ -2050,17 +2052,17 @@ function renderWeekPanel() {
   document.querySelectorAll('.week-notes-tab').forEach(tab => {
     tab.onclick = null;
     tab.addEventListener('click', () => {
-      const isSummary = tab.dataset.wntab === 'summary';
+      const wntab = tab.dataset.wntab;
       document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
-      document.getElementById('weekNotesTextarea').classList.toggle('hidden', isSummary);
-      document.getElementById('weekSummaryPanel').classList.toggle('hidden', !isSummary);
-      document.getElementById('saveNotesBtn').classList.toggle('hidden', isSummary);
-      if (isSummary) {
+      document.getElementById('weekNotesTextarea').classList.toggle('hidden',   wntab !== 'notes');
+      document.getElementById('standupNotesTextarea').classList.toggle('hidden', wntab !== 'standup');
+      document.getElementById('weekSummaryPanel').classList.toggle('hidden',    wntab !== 'summary');
+      document.getElementById('saveNotesBtn').classList.toggle('hidden',        wntab === 'summary');
+      if (wntab === 'summary') {
         const existing = Store.weekNotes()[`${weekKey}-summary`];
         if (existing) {
           showWeekSummary(existing);
         } else {
-          // Auto-generate when no summary exists yet
           generateWeekSummary();
         }
       }
@@ -2968,7 +2970,9 @@ function generateObsidianNote(week, year) {
   const { start, end } = weekRange(week, year);
   const tasks = Store.tasks().filter(t => t.week === week && t.year === year);
   const projects = Store.projects();
-  const notes = Store.weekNotes()[`${year}-W${week}`] || '';
+  const allWeekNotes = Store.weekNotes();
+  const notes        = allWeekNotes[`${year}-W${week}`] || '';
+  const standupNotes = allWeekNotes[`${year}-W${week}-standup`] || '';
 
   const getProject = id => projects.find(p => p.id === id);
 
@@ -3000,6 +3004,9 @@ date-range: "${formatDate(start)} → ${formatDate(end)}"
   if (notes) {
     md += `## Notes\n\n${notes}\n\n`;
   }
+  if (standupNotes) {
+    md += `## Standup Notes\n\n${standupNotes}\n\n`;
+  }
 
   if (personal.length > 0) {
     md += `## Personal Tasks\n\n${personal.map(taskLine).join('\n')}\n\n`;
@@ -3014,13 +3021,12 @@ date-range: "${formatDate(start)} → ${formatDate(end)}"
   }
 
   // Day notes for days within this week that have notes
-  const allNotes = Store.weekNotes();
   const { start: ws } = weekRange(week, year);
   const dayNoteEntries = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(ws); d.setDate(ws.getDate() + i);
     const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    if (allNotes[dk]) dayNoteEntries.push({ dk, note: allNotes[dk], d });
+    if (allWeekNotes[dk]) dayNoteEntries.push({ dk, note: allWeekNotes[dk], d });
   }
   if (dayNoteEntries.length > 0) {
     md += `## Day Notes\n\n`;
@@ -3150,11 +3156,14 @@ function closeObsidianModal() {
 function saveWeekNotes() {
   const { selectedWeek: w, selectedWeekYear: y } = state;
   const notes = Store.weekNotes();
-  const ta = document.getElementById('weekNotesTextarea');
-  if (!ta) return;
-  const val = ta.value;
   const key = `${y}-W${w}`;
-  if (val.trim()) notes[key] = val; else delete notes[key];
+
+  const ta = document.getElementById('weekNotesTextarea');
+  if (ta) { const v = ta.value; if (v.trim()) notes[key] = v; else delete notes[key]; }
+
+  const sta = document.getElementById('standupNotesTextarea');
+  if (sta) { const v = sta.value; if (v.trim()) notes[`${key}-standup`] = v; else delete notes[`${key}-standup`]; }
+
   Store.saveWeekNotes(notes);
   const btn = document.getElementById('saveNotesBtn');
   if (btn) { btn.textContent = 'Saved ✓'; setTimeout(() => btn.textContent = 'Save', 1500); }
