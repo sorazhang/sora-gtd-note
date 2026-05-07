@@ -786,21 +786,28 @@ ${startedList}
 Completed tasks this week (${completed.length}):
 ${completedList}
 
-Generate a standup summary with exactly these sections (## headers):
+Generate a standup summary using EXACTLY this notation system (no markdown ## headers, no bold):
 
-## Task Progress Summary
-For each started task: what progress was reported in standup notes, who mentioned it, and how many times it was referenced. Tasks mentioned multiple times likely have blockers or are high-priority — call that out.
+Topic lines end with a colon. Sub-topics are indented with a tab. Notes use "- text". Tasks use "- [ ] text". Inline status annotations use [wip] [done] [blocked]. Wrap high-priority items with ==like this==. Use [[note name]] for any referenced links or documents.
 
-## Team Member Updates
-What each person reported across standups (only if names appear in the notes).
+Output structure:
+Task Progress:
+\t<sub-topic per started task>:
+\t\t- progress reported in standup, how many times mentioned, any blockers
+\t\t- use ==text== if mentioned multiple times or has a blocker
+\t\t- use [blocked] annotation if explicitly blocked
 
-## Blockers & Risks
-Any blockers, dependencies, or concerns raised during standups.
+Team Updates:
+\t<name>:
+\t\t- what they reported (only include if names appear in notes)
 
-## Sprint Health
-One short paragraph on overall sprint progress based on task completion rate and standup sentiment.
+Blockers & Risks:
+\t- [ ] ==<item>== [blocked] for each blocker or risk (skip section if none)
 
-Be concise. Bullet points. Skip a section entirely if the notes contain no relevant information for it.`;
+Sprint Health:
+\t- one or two notes on overall progress and sentiment
+
+Be concise. Skip a section entirely if there is nothing relevant to put in it.`;
 }
 
 function buildSummaryPrompt(proj, tasks) {
@@ -836,35 +843,81 @@ ${pendingLines}
 Completed tasks (${completed.length}):
 ${completedLines}
 
-Generate a project summary with exactly these sections (use ## headers):
-## Pending Tasks & Due Dates
-List pending tasks grouped by week or urgency.
+Generate a project summary using EXACTLY this notation system (no markdown ## headers, no bold):
 
-## Completed Tasks
-Brief summary of what has been accomplished.
+Topic lines end with a colon. Sub-topics are indented with a tab. Notes use "- text". Tasks use "- [ ] text". Inline status annotations use [wip] [done] [blocked]. Wrap urgent/high-priority items with ==like this==. Use [[note name]] for referenced links or documents.
 
-## References & Links
-Extract any URLs, SharePoint links, file paths, or tools mentioned anywhere above. If none, write "(none found)".
+Output structure:
+Pending Tasks:
+\t<group by week or urgency as sub-topics>:
+\t\t- [ ] <task> [<priority>] — use ==text== for high priority items
 
-## Risks
-Identify risks, blockers, or concerns mentioned or implied. If none, write "(none identified)".
+Completed:
+\t- [done] <task summary>
 
-Keep each section concise. Use markdown bullet points.`;
+References & Links:
+\t- [[<link or resource name>]] for each URL, SharePoint, file path, or tool mentioned (skip if none)
+
+Risks:
+\t- [ ] ==<risk>== [blocked] for blockers, or - <risk> for general risks (skip if none)
+
+Keep each section concise.`;
 }
 
 function renderMarkdownSimple(text) {
-  return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/^## (.+)$/gm, '<h4 class="md-h2">$1</h4>')
-    .replace(/^### (.+)$/gm, '<strong class="md-h3">$1</strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>[\s\S]*?<\/li>)(\n<li>|$)/g, (_, li) => li)
-    .replace(/((<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
-    .replace(/\n\n/g, '<br>')
-    .replace(/^(?!<[hul]|<br)(.+)$/gm, '<p>$1</p>');
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // inline transforms applied to escaped text
+  function inlineFormat(s) {
+    return s
+      // ==highlight==
+      .replace(/==(.+?)==/g, '<mark class="ms-highlight">$1</mark>')
+      // [annotation]
+      .replace(/\[([^\]]+)\]/g, '<span class="ms-annotation">[$1]</span>')
+      // [[wikilink]]
+      .replace(/\[\[([^\]]+)\]\]/g, '<span class="ms-wikilink">[[$1]]</span>')
+      // URLs
+      .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }
+
+  const lines = text.split('\n');
+  let html = '';
+
+  for (const raw of lines) {
+    const line = raw.replace(/\t/g, '  '); // normalise tabs for indent counting
+    const indent = raw.match(/^(\t| {2,})*/)?.[0].replace(/ {2}/g, '\t').replace(/\t/g, '\t').split('\t').length - 1 || 0;
+    const trimmed = raw.trimStart();
+
+    if (!trimmed) { html += '<div class="ms-spacer"></div>'; continue; }
+
+    const indentPx = indent * 14;
+    const style = indentPx ? ` style="margin-left:${indentPx}px"` : '';
+
+    // Topic line: ends with ":"
+    if (/^[^\-\s].+:\s*$/.test(trimmed)) {
+      html += `<div class="ms-topic"${style}>${inlineFormat(esc(trimmed))}</div>`;
+      continue;
+    }
+
+    // Task: "- [ ] ..."
+    const taskMatch = trimmed.match(/^-\s+\[ \]\s+(.*)/);
+    if (taskMatch) {
+      html += `<div class="ms-task"${style}><span class="ms-checkbox">☐</span> ${inlineFormat(esc(taskMatch[1]))}</div>`;
+      continue;
+    }
+
+    // Note: "- ..."
+    const noteMatch = trimmed.match(/^-\s+(.*)/);
+    if (noteMatch) {
+      html += `<div class="ms-note"${style}><span class="ms-dash">–</span> ${inlineFormat(esc(noteMatch[1]))}</div>`;
+      continue;
+    }
+
+    // Fallback paragraph
+    html += `<div class="ms-para"${style}>${inlineFormat(esc(trimmed))}</div>`;
+  }
+
+  return html;
 }
 
 // ===== Archive View =====

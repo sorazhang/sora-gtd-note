@@ -1904,19 +1904,26 @@ body {
   overflow-y: auto;
   max-height: 340px;
 }
-.proj-summary-output h4.md-h2 {
-  font-size: 13px;
+/* ===== Marking System Renderer ===== */
+.proj-summary-output .ms-topic {
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: .04em;
-  color: #6366f1;
+  letter-spacing: .05em;
   text-transform: uppercase;
-  margin: 16px 0 6px;
+  color: #6366f1;
+  margin: 14px 0 4px;
 }
-.proj-summary-output h4.md-h2:first-child { margin-top: 0; }
-.proj-summary-output ul { margin: 4px 0 8px 16px; padding: 0; }
-.proj-summary-output li { margin-bottom: 3px; }
+.proj-summary-output .ms-topic:first-child { margin-top: 0; }
+.proj-summary-output .ms-note,
+.proj-summary-output .ms-task,
+.proj-summary-output .ms-para { font-size: 13px; margin: 3px 0; line-height: 1.55; }
+.proj-summary-output .ms-dash  { color: var(--text-3); margin-right: 4px; }
+.proj-summary-output .ms-checkbox { color: var(--text-3); margin-right: 4px; font-size: 12px; }
+.proj-summary-output .ms-spacer { height: 6px; }
+.proj-summary-output .ms-highlight { background: #fef08a; color: #713f12; border-radius: 2px; padding: 0 2px; }
+.proj-summary-output .ms-annotation { color: #a78bfa; font-size: 11.5px; font-weight: 600; }
+.proj-summary-output .ms-wikilink { color: #818cf8; font-size: 12px; }
 .proj-summary-output a { color: #6366f1; text-decoration: underline; word-break: break-all; }
-.proj-summary-output p { margin: 4px 0; }
 
 .proj-notes-label {
   font-size: 11px;
