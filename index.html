@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GTD Note System</title>
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body>
   <div class="app-container">
@@ -142,7 +142,10 @@
             <textarea class="week-notes-textarea hidden" id="standupNotesTextarea"
               placeholder="Paste or type standup notes here… e.g. Mon: Alice - finished login page. Bob - blocked on API…"></textarea>
             <div id="weekSummaryPanel" class="proj-summary-panel hidden">
-              <button class="btn-generate-summary" id="weekGenerateBtn">✨ Generate Summary</button>
+              <div class="summary-toolbar">
+                <button class="btn-generate-summary" id="weekGenerateBtn">✨ Generate Summary</button>
+                <button class="btn-copy-summary hidden" id="weekCopyBtn" title="Copy summary text">⎘ Copy</button>
+              </div>
               <div class="proj-summary-output hidden" id="weekSummaryOutput"></div>
             </div>
           </div>
@@ -389,6 +392,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=30"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>

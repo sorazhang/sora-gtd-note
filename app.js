@@ -448,7 +448,10 @@ function renderProjectView() {
       <textarea class="proj-notes-textarea" id="projNotesTextarea"
         placeholder="Vision, goals, sequence, key reminders…">${escHtml(proj.notes || proj.description || '')}</textarea>
       <div id="projSummaryPanel" class="proj-summary-panel hidden">
-        <button class="btn-generate-summary" id="projGenerateBtn">✨ Generate Summary</button>
+        <div class="summary-toolbar">
+          <button class="btn-generate-summary" id="projGenerateBtn">✨ Generate Summary</button>
+          <button class="btn-copy-summary hidden" id="projCopyBtn" title="Copy summary text">⎘ Copy</button>
+        </div>
         <div class="proj-summary-output hidden" id="projSummaryOutput"></div>
       </div>
     </div>
@@ -535,8 +538,12 @@ function renderProjectView() {
     const out = document.getElementById('projSummaryOutput');
     out.innerHTML = renderMarkdownSimple(text);
     out.classList.remove('hidden');
-    const btn = document.getElementById('projGenerateBtn');
-    btn.textContent = '↻ Regenerate';
+    document.getElementById('projGenerateBtn').textContent = '↻ Regenerate';
+    const copyBtn = document.getElementById('projCopyBtn');
+    if (copyBtn) {
+      copyBtn.classList.remove('hidden');
+      copyBtn.onclick = () => copySummaryText(text, copyBtn);
+    }
   }
 
   document.getElementById('projGenerateBtn').addEventListener('click', async () => {
@@ -2160,11 +2167,24 @@ function renderWeekPanel() {
   }
 }
 
+function copySummaryText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = orig; }, 1800);
+  });
+}
+
 function showWeekSummary(text) {
   const out = document.getElementById('weekSummaryOutput');
   out.innerHTML = renderMarkdownSimple(text);
   out.classList.remove('hidden');
   document.getElementById('weekGenerateBtn').textContent = '↻ Regenerate';
+  const copyBtn = document.getElementById('weekCopyBtn');
+  if (copyBtn) {
+    copyBtn.classList.remove('hidden');
+    copyBtn.onclick = () => copySummaryText(text, copyBtn);
+  }
 }
 
 function renderWeekTasks() {
