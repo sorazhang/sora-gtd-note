@@ -771,43 +771,52 @@ function buildWeekSummaryPrompt(week, year, start, end, notesText, startedTasks,
     `- ${t.title}${t.completedAt ? ' (done ' + new Date(t.completedAt).toLocaleDateString() + ')' : ''}`
   ).join('\n') || '(none)';
 
-  return `You are analyzing agile standup notes for a sprint week. Focus specifically on the started/in-progress tasks listed below and cross-reference them with the standup notes.
+  return `You are a project manager writing a sprint week summary. Your tone is observational and direct — like a PM reporting to stakeholders. Analyse the standup notes and task list below, then produce a structured summary grouped by task.
 
 Week ${week} · ${year} (${start.toLocaleDateString()} – ${end.toLocaleDateString()})
 
-Standup notes for this week:
+Standup notes:
 """
 ${notesText || '(no standup notes recorded — base summary on task list only)'}
 """
 
-In-progress / started tasks this week (${startedTasks.length}):
+In-progress / started tasks (${startedTasks.length}):
 ${startedList}
 
-Completed tasks this week (${completed.length}):
+Completed tasks (${completed.length}):
 ${completedList}
 
-Generate a standup summary using EXACTLY this notation system (no markdown ## headers, no bold):
+Write the summary using EXACTLY this notation (no markdown ## headers, no bold asterisks):
+- Topic lines end with a colon
+- Sub-topics are indented with one tab
+- Notes use "- text", tasks use "- [ ] text"
+- Status annotations are inline: [wip] [done] [blocked] [at-risk]
+- Wrap urgent or attention-needed items with ==like this==
+- Use [[link name]] for referenced documents or tools
 
-Topic lines end with a colon. Sub-topics are indented with a tab. Notes use "- text". Tasks use "- [ ] text". Inline status annotations use [wip] [done] [blocked]. Wrap high-priority items with ==like this==. Use [[note name]] for any referenced links or documents.
+Produce exactly these sections in order:
 
-Output structure:
-Task Progress:
-\t<sub-topic per started task>:
-\t\t- progress reported in standup, how many times mentioned, any blockers
-\t\t- use ==text== if mentioned multiple times or has a blocker
-\t\t- use [blocked] annotation if explicitly blocked
+Tasks:
+\t<one sub-topic per task, named after the task>:
+\t\tStatus: [wip] or [blocked] or [done] — one word description of current state
+\t\tOwner: name or (unassigned)
+\t\tNature: one short phrase describing the type of work (e.g. development, review, coordination, testing)
+\t\t- PM observation: what is actually happening on this task based on standup mentions and task data. Use ==text== if the task needs attention or was mentioned multiple times. Add [blocked] if blocked.
+\t\t- [ ] follow-up action if one is clearly needed (omit if not)
 
-Team Updates:
+Team:
 \t<name>:
-\t\t- what they reported (only include if names appear in notes)
+\t\t- summary of their reported work this week
+\t(skip entire section if no names appear in notes)
 
-Blockers & Risks:
-\t- [ ] ==<item>== [blocked] for each blocker or risk (skip section if none)
+Risks:
+\t- [ ] ==<risk or blocker>== [blocked or at-risk] for each issue raised
+\t(skip entire section if none)
 
-Sprint Health:
-\t- one or two notes on overall progress and sentiment
+Sprint Verdict:
+\t- one PM-voice sentence on overall sprint health and momentum
 
-Be concise. Skip a section entirely if there is nothing relevant to put in it.`;
+Be concise. Skip a section entirely if there is no relevant information for it.`;
 }
 
 function buildSummaryPrompt(proj, tasks) {
@@ -893,9 +902,17 @@ function renderMarkdownSimple(text) {
     const indentPx = indent * 14;
     const style = indentPx ? ` style="margin-left:${indentPx}px"` : '';
 
-    // Topic line: ends with ":"
+    // Field line: "Key: value" (not a top-level topic, has content after colon)
+    const fieldMatch = trimmed.match(/^([A-Za-z][A-Za-z ]+):\s+(.+)$/);
+    if (fieldMatch && indent > 0) {
+      html += `<div class="ms-field"${style}><span class="ms-field-key">${esc(fieldMatch[1])}:</span> ${inlineFormat(esc(fieldMatch[2]))}</div>`;
+      continue;
+    }
+
+    // Topic line: ends with ":" (nothing after colon)
     if (/^[^\-\s].+:\s*$/.test(trimmed)) {
-      html += `<div class="ms-topic"${style}>${inlineFormat(esc(trimmed))}</div>`;
+      const cls = indent === 0 ? 'ms-topic' : 'ms-subtopic';
+      html += `<div class="${cls}"${style}>${inlineFormat(esc(trimmed))}</div>`;
       continue;
     }
 
