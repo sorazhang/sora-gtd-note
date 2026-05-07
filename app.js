@@ -764,21 +764,23 @@ function saveProjectNotes() {
   setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
 }
 
-function buildWeekSummaryPrompt(week, year, start, end, notesText, startedTasks, allWeekTasks) {
+function buildWeekSummaryPrompt(week, year, start, end, notesText, startedTasks, allWeekTasks, projects) {
   const completed = allWeekTasks.filter(t => t.status === 'done');
+  const projMap = Object.fromEntries((projects || []).map(p => [p.id, p.name]));
 
-  const startedList = startedTasks.map(t =>
+  const taskLine = t =>
     `- [${t.execStatus === 'wip' ? 'WIP' : t.status.toUpperCase()}] ${t.title}` +
-    `${t.delegated ? ' (owner: ' + t.delegated + ')' : ''}` +
+    `${t.delegated ? ' · owner: ' + t.delegated : ''}` +
     `${t.day ? ' · due ' + t.day : ''}` +
-    `${t.notes ? ' · note: ' + t.notes : ''}`
-  ).join('\n') || '(no started tasks this week)';
+    `${t.project && projMap[t.project] ? ' · project: ' + projMap[t.project] : ''}` +
+    `${t.notes ? ' · note: ' + t.notes : ''}`;
 
+  const startedList  = startedTasks.map(taskLine).join('\n')  || '(no started tasks this week)';
   const completedList = completed.map(t =>
     `- ${t.title}${t.completedAt ? ' (done ' + new Date(t.completedAt).toLocaleDateString() + ')' : ''}`
   ).join('\n') || '(none)';
 
-  return `You are a project manager writing a sprint week summary. Your tone is observational and direct — like a PM reporting to stakeholders. Analyse the standup notes and task list below, then produce a structured summary grouped by task.
+  return `You are a project manager writing a sprint week summary. Your tone is observational and direct — like a PM reporting to stakeholders.
 
 Week ${week} · ${year} (${start.toLocaleDateString()} – ${end.toLocaleDateString()})
 
@@ -801,29 +803,43 @@ Write the summary using EXACTLY this notation (no markdown ## headers, no bold a
 - Wrap urgent or attention-needed items with ==like this==
 - Use [[link name]] for referenced documents or tools
 
-Produce exactly these sections in order:
+Classify every task into exactly one of these four sections. Use the task data, project name, owner, and standup notes to determine the right bucket:
 
-Tasks:
-\t<one sub-topic per task, named after the task>:
-\t\tStatus: [wip] or [blocked] or [done] — one word description of current state
+Active Projects & CR:
+\tTasks your team owns and is actively building or changing — features, bug fixes, change requests, development work.
+\t<one sub-topic per task>:
+\t\tStatus: [wip] / [blocked] / [done]
 \t\tOwner: name or (unassigned)
-\t\tNature: one short phrase describing the type of work (e.g. development, review, coordination, testing)
-\t\t- PM observation: what is actually happening on this task based on standup mentions and task data. Use ==text== if the task needs attention or was mentioned multiple times. Add [blocked] if blocked.
-\t\t- [ ] follow-up action if one is clearly needed (omit if not)
+\t\tNature: one short phrase (e.g. development, code review, UAT, deployment)
+\t\t- PM observation: progress, mention frequency, attention flags. Use ==text== if needs attention. Add [blocked] if blocked.
+\t\t- [ ] follow-up action if clearly needed
 
-Team:
-\t<name>:
-\t\t- summary of their reported work this week
-\t(skip entire section if no names appear in notes)
+Dependency Workstream:
+\tTasks or deliverables owned by OTHER teams that directly affect your project scope or timeline.
+\t<one sub-topic per dependency>:
+\t\tStatus: [wip] / [blocked] / [at-risk]
+\t\tOwner: external team or person name
+\t\t- PM observation: what they are delivering, when it is needed, and any risk to your timeline. Use ==text== if at risk.
+\t\t- [ ] follow-up or chase action if needed
 
-Risks:
-\t- [ ] ==<risk or blocker>== [blocked or at-risk] for each issue raised
-\t(skip entire section if none)
+Project Governance:
+\tAdmin and process tasks: access requests, production release approvals, CAB submissions, compliance sign-offs, environment requests.
+\t<one sub-topic per governance item>:
+\t\tStatus: [wip] / [blocked] / [pending approval]
+\t\tOwner: name or (unassigned)
+\t\t- PM observation: current state and any delay risk. Use ==text== if overdue or blocking a release.
+\t\t- [ ] action required if pending
+
+Next Project Grooming:
+\tUpcoming work being shaped, estimated, or planned — not yet in active sprint. Backlog items, pre-sprint analysis, scoping discussions.
+\t<one sub-topic per grooming item>:
+\t\t- what needs to be groomed, estimated, or decided before it can start
+\t\t- [ ] grooming action if one is needed
 
 Sprint Verdict:
 \t- one PM-voice sentence on overall sprint health and momentum
 
-Be concise. Skip a section entirely if there is no relevant information for it.`;
+Be concise. If a section has no tasks, write a single note line: "- (none this week)". Do not skip sections.`;
 }
 
 function buildSummaryPrompt(proj, tasks) {
@@ -2098,13 +2114,11 @@ function renderWeekPanel() {
     try {
       const weekNoteText = Store.weekNotes()[`${weekKey}-standup`] || Store.weekNotes()[weekKey] || '';
       const allTasks = Store.tasks().filter(t => !t.archived);
-      // Started tasks: WIP or next-action in this week
       const startedTasks = allTasks.filter(t =>
         t.week === w && t.year === y && (t.execStatus === 'wip' || t.status === 'next' || t.status === 'waiting')
       );
-      // Also include all week tasks for context
       const weekTasks = allTasks.filter(t => t.week === w && t.year === y);
-      const prompt = buildWeekSummaryPrompt(w, y, start, end, weekNoteText, startedTasks, weekTasks);
+      const prompt = buildWeekSummaryPrompt(w, y, start, end, weekNoteText, startedTasks, weekTasks, Store.projects());
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
