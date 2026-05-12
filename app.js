@@ -1869,61 +1869,79 @@ function closeFocusMode() {
 
 function renderWorkspaceView() {
   const el = document.getElementById('workspaceView');
-  const projects = Store.projects();
   const filter = state.workspaceFilter || 'next';
   const WORKSPACE_NOTE_KEY = 'workspace_note';
 
   let tasks = Store.tasks().filter(t => !t.archived);
-  if (filter === 'next')   tasks = tasks.filter(t => t.status === 'next' && t.execStatus !== 'done');
+  if (filter === 'next')    tasks = tasks.filter(t => t.status === 'next' && t.execStatus !== 'done');
   else if (filter === 'wip') tasks = tasks.filter(t => t.execStatus === 'wip');
   else if (filter === 'today') {
     const today = new Date().toISOString().slice(0, 10);
     tasks = tasks.filter(t => t.day === today && t.execStatus !== 'done');
   }
-  // 'all' — no extra filter
-
-  tasks.sort((a, b) => {
-    const po = { high: 0, medium: 1, low: 2 };
-    return (po[a.priority] ?? 1) - (po[b.priority] ?? 1);
-  });
 
   const savedNote = localStorage.getItem(WORKSPACE_NOTE_KEY) || '';
+  const now = new Date();
+  const currentWeek = isoWeek(now);
+  const currentYear = isoWeekYear(now);
 
+  // Build layout shell
   el.innerHTML = `
     <div class="ws-layout">
       <div class="ws-tasks-col">
         <div class="ws-col-header">
           <div class="ws-filter-row">
-            <button class="ws-filter-btn ${filter==='next'?'active':''}" data-wsf="next">⚡ Next</button>
-            <button class="ws-filter-btn ${filter==='wip'?'active':''}" data-wsf="wip">🔄 WIP</button>
-            <button class="ws-filter-btn ${filter==='today'?'active':''}" data-wsf="today">📅 Today</button>
-            <button class="ws-filter-btn ${filter==='all'?'active':''}" data-wsf="all">All</button>
+            <button class="ws-filter-btn ${filter==='next'  ?'active':''}" data-wsf="next">⚡ Next</button>
+            <button class="ws-filter-btn ${filter==='wip'   ?'active':''}" data-wsf="wip">🔄 WIP</button>
+            <button class="ws-filter-btn ${filter==='today' ?'active':''}" data-wsf="today">📅 Today</button>
+            <button class="ws-filter-btn ${filter==='all'   ?'active':''}" data-wsf="all">All</button>
           </div>
-          <button class="ws-add-btn" id="wsAddTaskBtn">+ Add</button>
+          <button class="ws-add-btn" id="wsAddTaskBtn">+ Task</button>
         </div>
-        <div class="ws-task-list">
-          ${tasks.length ? tasks.map(t => {
-            const proj = projects.find(p => p.id === t.project);
-            const priDot = { high: 'ws-dot-high', medium: 'ws-dot-med', low: 'ws-dot-low' }[t.priority] || 'ws-dot-med';
-            const done = t.execStatus === 'done';
-            return `<div class="ws-task-row ${done ? 'ws-task-done' : ''}" data-id="${t.id}">
-              <span class="ws-dot ${priDot}"></span>
-              <span class="ws-task-title">${t.title}</span>
-              ${proj ? `<span class="ws-proj-badge">${proj.name}</span>` : ''}
-            </div>`;
-          }).join('') : `<div class="ws-empty">No tasks here.</div>`}
-        </div>
+        <div class="ws-task-list" id="wsTaskList"></div>
       </div>
       <div class="ws-note-col">
         <div class="ws-col-header">
-          <span class="ws-note-label">Note</span>
+          <span class="ws-note-label">Notes</span>
           <span class="ws-save-status" id="wsSaveStatus"></span>
         </div>
-        <textarea class="ws-note-textarea" id="wsNoteTextarea" placeholder="Write anything — thoughts, links, scratch pad…">${savedNote.replace(/</g,'&lt;')}</textarea>
+        <textarea class="ws-note-textarea" id="wsNoteTextarea" placeholder="Write anything — thoughts, links, scratch pad…">${savedNote.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
       </div>
     </div>
   `;
 
+  // Populate task list with week-grouped buildTaskCard rows
+  const listEl = el.querySelector('#wsTaskList');
+  if (tasks.length === 0) {
+    listEl.innerHTML = '<div class="ws-empty">No tasks here.</div>';
+  } else {
+    const weekMap = new Map();
+    tasks.forEach(t => {
+      const key = t.week && t.year ? `${t.year}-W${String(t.week).padStart(2,'0')}` : 'no-week';
+      if (!weekMap.has(key)) weekMap.set(key, { week: t.week, year: t.year, tasks: [] });
+      weekMap.get(key).tasks.push(t);
+    });
+    const sorted = [...weekMap.entries()].sort(([a],[b]) => {
+      if (a === 'no-week') return 1;
+      if (b === 'no-week') return -1;
+      return a < b ? -1 : 1;
+    });
+    sorted.forEach(([, { week, year, tasks: wt }]) => {
+      const hdr = document.createElement('div');
+      hdr.className = 'proj-week-header';
+      if (week && year) {
+        const { start, end } = weekRange(week, year);
+        const isCurrent = week === currentWeek && year === currentYear;
+        hdr.innerHTML = `<span class="proj-week-label${isCurrent?' current':''}">W${week} · ${formatDateShort(start)}–${formatDateShort(end)}</span><span class="proj-week-count">${wt.length}</span>`;
+      } else {
+        hdr.innerHTML = `<span class="proj-week-label">No week</span>`;
+      }
+      listEl.appendChild(hdr);
+      wt.forEach(t => listEl.appendChild(buildTaskCard(t)));
+    });
+  }
+
+  // Filter buttons
   el.querySelectorAll('.ws-filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       state.workspaceFilter = btn.dataset.wsf;
@@ -1933,10 +1951,7 @@ function renderWorkspaceView() {
 
   el.querySelector('#wsAddTaskBtn').addEventListener('click', () => openTaskModal(null));
 
-  el.querySelectorAll('.ws-task-row').forEach(row => {
-    row.addEventListener('click', () => openTaskModal(row.dataset.id));
-  });
-
+  // Auto-save note
   let saveTimer;
   const noteEl = el.querySelector('#wsNoteTextarea');
   const statusEl = el.querySelector('#wsSaveStatus');
