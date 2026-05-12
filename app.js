@@ -1424,21 +1424,27 @@ function renderBoardView() {
 // ===== Right Panel Router =====
 
 function renderRightPanel() {
-  const dayView     = document.getElementById('dayView');
-  const todayView   = document.getElementById('todayView');
-  const inboxView   = document.getElementById('inboxView');
-  const weekView    = document.getElementById('weekView');
-  const projectView = document.getElementById('projectView');
-  const boardView   = document.getElementById('boardView');
-  const archiveView = document.getElementById('archiveView');
-  const titleEl     = document.querySelector('.week-panel-title');
-  const datesEl     = document.querySelector('.week-panel-dates');
-  const generateBtn = document.getElementById('generateNoteBtn');
+  const dayView       = document.getElementById('dayView');
+  const todayView     = document.getElementById('todayView');
+  const inboxView     = document.getElementById('inboxView');
+  const weekView      = document.getElementById('weekView');
+  const projectView   = document.getElementById('projectView');
+  const boardView     = document.getElementById('boardView');
+  const archiveView   = document.getElementById('archiveView');
+  const workspaceView = document.getElementById('workspaceView');
+  const titleEl       = document.querySelector('.week-panel-title');
+  const datesEl       = document.querySelector('.week-panel-dates');
+  const generateBtn   = document.getElementById('generateNoteBtn');
 
-  [dayView, todayView, inboxView, weekView, projectView, boardView, archiveView].forEach(el => el.classList.add('hidden'));
+  [dayView, todayView, inboxView, weekView, projectView, boardView, archiveView, workspaceView].forEach(el => el.classList.add('hidden'));
   generateBtn.classList.add('hidden');
 
-  if (state.activeView === 'today') {
+  if (state.activeView === 'workspace') {
+    workspaceView.classList.remove('hidden');
+    titleEl.textContent = 'Workspace';
+    datesEl.textContent = 'Tasks + notes side by side';
+    renderWorkspaceView();
+  } else if (state.activeView === 'today') {
     todayView.classList.remove('hidden');
     titleEl.textContent = "Today's Focus";
     datesEl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
@@ -1859,6 +1865,90 @@ function closeFocusMode() {
   stopFocusTimer(true);
   document.getElementById('focusModeOverlay').classList.add('hidden');
   renderAll();
+}
+
+function renderWorkspaceView() {
+  const el = document.getElementById('workspaceView');
+  const projects = Store.projects();
+  const filter = state.workspaceFilter || 'next';
+  const WORKSPACE_NOTE_KEY = 'workspace_note';
+
+  let tasks = Store.tasks().filter(t => !t.archived);
+  if (filter === 'next')   tasks = tasks.filter(t => t.status === 'next' && t.execStatus !== 'done');
+  else if (filter === 'wip') tasks = tasks.filter(t => t.execStatus === 'wip');
+  else if (filter === 'today') {
+    const today = new Date().toISOString().slice(0, 10);
+    tasks = tasks.filter(t => t.day === today && t.execStatus !== 'done');
+  }
+  // 'all' — no extra filter
+
+  tasks.sort((a, b) => {
+    const po = { high: 0, medium: 1, low: 2 };
+    return (po[a.priority] ?? 1) - (po[b.priority] ?? 1);
+  });
+
+  const savedNote = localStorage.getItem(WORKSPACE_NOTE_KEY) || '';
+
+  el.innerHTML = `
+    <div class="ws-layout">
+      <div class="ws-tasks-col">
+        <div class="ws-col-header">
+          <div class="ws-filter-row">
+            <button class="ws-filter-btn ${filter==='next'?'active':''}" data-wsf="next">⚡ Next</button>
+            <button class="ws-filter-btn ${filter==='wip'?'active':''}" data-wsf="wip">🔄 WIP</button>
+            <button class="ws-filter-btn ${filter==='today'?'active':''}" data-wsf="today">📅 Today</button>
+            <button class="ws-filter-btn ${filter==='all'?'active':''}" data-wsf="all">All</button>
+          </div>
+          <button class="ws-add-btn" id="wsAddTaskBtn">+ Add</button>
+        </div>
+        <div class="ws-task-list">
+          ${tasks.length ? tasks.map(t => {
+            const proj = projects.find(p => p.id === t.project);
+            const priDot = { high: 'ws-dot-high', medium: 'ws-dot-med', low: 'ws-dot-low' }[t.priority] || 'ws-dot-med';
+            const done = t.execStatus === 'done';
+            return `<div class="ws-task-row ${done ? 'ws-task-done' : ''}" data-id="${t.id}">
+              <span class="ws-dot ${priDot}"></span>
+              <span class="ws-task-title">${t.title}</span>
+              ${proj ? `<span class="ws-proj-badge">${proj.name}</span>` : ''}
+            </div>`;
+          }).join('') : `<div class="ws-empty">No tasks here.</div>`}
+        </div>
+      </div>
+      <div class="ws-note-col">
+        <div class="ws-col-header">
+          <span class="ws-note-label">Note</span>
+          <span class="ws-save-status" id="wsSaveStatus"></span>
+        </div>
+        <textarea class="ws-note-textarea" id="wsNoteTextarea" placeholder="Write anything — thoughts, links, scratch pad…">${savedNote.replace(/</g,'&lt;')}</textarea>
+      </div>
+    </div>
+  `;
+
+  el.querySelectorAll('.ws-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.workspaceFilter = btn.dataset.wsf;
+      renderWorkspaceView();
+    });
+  });
+
+  el.querySelector('#wsAddTaskBtn').addEventListener('click', () => openTaskModal(null));
+
+  el.querySelectorAll('.ws-task-row').forEach(row => {
+    row.addEventListener('click', () => openTaskModal(row.dataset.id));
+  });
+
+  let saveTimer;
+  const noteEl = el.querySelector('#wsNoteTextarea');
+  const statusEl = el.querySelector('#wsSaveStatus');
+  noteEl.addEventListener('input', () => {
+    clearTimeout(saveTimer);
+    statusEl.textContent = '';
+    saveTimer = setTimeout(() => {
+      localStorage.setItem(WORKSPACE_NOTE_KEY, noteEl.value);
+      statusEl.textContent = 'Saved';
+      setTimeout(() => { statusEl.textContent = ''; }, 1500);
+    }, 600);
+  });
 }
 
 function renderFocusMode(index) {
