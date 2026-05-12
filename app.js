@@ -448,7 +448,10 @@ function renderProjectView() {
       <textarea class="proj-notes-textarea" id="projNotesTextarea"
         placeholder="Vision, goals, sequence, key reminders…">${escHtml(proj.notes || proj.description || '')}</textarea>
       <div id="projSummaryPanel" class="proj-summary-panel hidden">
-        <button class="btn-generate-summary" id="projGenerateBtn">✨ Generate Summary</button>
+        <div class="summary-toolbar">
+          <button class="btn-generate-summary" id="projGenerateBtn">✨ Generate Summary</button>
+          <button class="btn-copy-summary hidden" id="projCopyBtn" title="Copy summary text">⎘ Copy</button>
+        </div>
         <div class="proj-summary-output hidden" id="projSummaryOutput"></div>
       </div>
     </div>
@@ -535,8 +538,12 @@ function renderProjectView() {
     const out = document.getElementById('projSummaryOutput');
     out.innerHTML = renderMarkdownSimple(text);
     out.classList.remove('hidden');
-    const btn = document.getElementById('projGenerateBtn');
-    btn.textContent = '↻ Regenerate';
+    document.getElementById('projGenerateBtn').textContent = '↻ Regenerate';
+    const copyBtn = document.getElementById('projCopyBtn');
+    if (copyBtn) {
+      copyBtn.classList.remove('hidden');
+      copyBtn.onclick = () => copySummaryText(text, copyBtn);
+    }
   }
 
   document.getElementById('projGenerateBtn').addEventListener('click', async () => {
@@ -757,41 +764,82 @@ function saveProjectNotes() {
   setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 1200);
 }
 
-function buildWeekSummaryPrompt(week, year, start, end, notesText, tasks) {
-  const pending   = tasks.filter(t => t.status !== 'done');
-  const completed = tasks.filter(t => t.status === 'done');
+function buildWeekSummaryPrompt(week, year, start, end, notesText, startedTasks, allWeekTasks, projects) {
+  const completed = allWeekTasks.filter(t => t.status === 'done');
+  const projMap = Object.fromEntries((projects || []).map(p => [p.id, p.name]));
 
-  const taskList = tasks.map(t =>
-    `- [${t.status === 'done' ? 'DONE' : 'PENDING'}] ${t.title}${t.delegated ? ' (owner: ' + t.delegated + ')' : ''}${t.day ? ' due ' + t.day : ''}`
-  ).join('\n') || '(no tasks this week)';
+  const taskLine = t =>
+    `- [${t.execStatus === 'wip' ? 'WIP' : t.status.toUpperCase()}] ${t.title}` +
+    `${t.delegated ? ' · owner: ' + t.delegated : ''}` +
+    `${t.day ? ' · due ' + t.day : ''}` +
+    `${t.project && projMap[t.project] ? ' · project: ' + projMap[t.project] : ''}` +
+    `${t.notes ? ' · note: ' + t.notes : ''}`;
 
-  return `You are analyzing agile standup notes from a sprint week for a GTD productivity tool.
+  const startedList  = startedTasks.map(taskLine).join('\n')  || '(no started tasks this week)';
+  const completedList = completed.map(t =>
+    `- ${t.title}${t.completedAt ? ' (done ' + new Date(t.completedAt).toLocaleDateString() + ')' : ''}`
+  ).join('\n') || '(none)';
+
+  return `You are a project manager writing a sprint week summary. Your tone is observational and direct — like a PM reporting to stakeholders.
 
 Week ${week} · ${year} (${start.toLocaleDateString()} – ${end.toLocaleDateString()})
 
-Raw standup notes for this week:
+Standup notes:
 """
-${notesText || '(no notes recorded)'}
+${notesText || '(no standup notes recorded — base summary on task list only)'}
 """
 
-Tasks planned for this week (${tasks.length} total, ${completed.length} done):
-${taskList}
+In-progress / started tasks (${startedTasks.length}):
+${startedList}
 
-Analyze the standup notes and generate a sprint week summary with exactly these sections (## headers):
+Completed tasks (${completed.length}):
+${completedList}
 
-## Task Progress Summary
-For each task mentioned in the standup notes: summarize its progress, who mentioned it, how many times it came up across standups, and any blockers. If a task appears multiple times, highlight that frequency — it indicates either importance or a recurring blocker.
+Write the summary using EXACTLY this notation (no markdown ## headers, no bold asterisks):
+- Topic lines end with a colon
+- Sub-topics are indented with one tab
+- Notes use "- text", tasks use "- [ ] text"
+- Status annotations are inline: [wip] [done] [blocked] [at-risk]
+- Wrap urgent or attention-needed items with ==like this==
+- Use [[link name]] for referenced documents or tools
 
-## Team Member Updates
-Summarize each person's reported progress (if names appear in the notes).
+Classify every task into exactly one of these four sections. Use the task data, project name, owner, and standup notes to determine the right bucket:
 
-## Blockers & Risks
-List any blockers, dependencies, or risks raised during standups.
+Active Projects & CR:
+\tTasks your team owns and is actively building or changing — features, bug fixes, change requests, development work.
+\t<one sub-topic per task>:
+\t\tStatus: [wip] / [blocked] / [done]
+\t\tOwner: name or (unassigned)
+\t\tNature: one short phrase (e.g. development, code review, UAT, deployment)
+\t\t- PM observation: progress, mention frequency, attention flags. Use ==text== if needs attention. Add [blocked] if blocked.
+\t\t- [ ] follow-up action if clearly needed
 
-## Sprint Health
-One short paragraph assessing overall sprint progress based on the notes and task completion rate.
+Dependency Workstream:
+\tTasks or deliverables owned by OTHER teams that directly affect your project scope or timeline.
+\t<one sub-topic per dependency>:
+\t\tStatus: [wip] / [blocked] / [at-risk]
+\t\tOwner: external team or person name
+\t\t- PM observation: what they are delivering, when it is needed, and any risk to your timeline. Use ==text== if at risk.
+\t\t- [ ] follow-up or chase action if needed
 
-Be concise. Use markdown bullet points. If the notes don't mention something, skip that subsection rather than guessing.`;
+Project Governance:
+\tAdmin and process tasks: access requests, production release approvals, CAB submissions, compliance sign-offs, environment requests.
+\t<one sub-topic per governance item>:
+\t\tStatus: [wip] / [blocked] / [pending approval]
+\t\tOwner: name or (unassigned)
+\t\t- PM observation: current state and any delay risk. Use ==text== if overdue or blocking a release.
+\t\t- [ ] action required if pending
+
+Next Project Grooming:
+\tUpcoming work being shaped, estimated, or planned — not yet in active sprint. Backlog items, pre-sprint analysis, scoping discussions.
+\t<one sub-topic per grooming item>:
+\t\t- what needs to be groomed, estimated, or decided before it can start
+\t\t- [ ] grooming action if one is needed
+
+Sprint Verdict:
+\t- one PM-voice sentence on overall sprint health and momentum
+
+Be concise. If a section has no tasks, write a single note line: "- (none this week)". Do not skip sections.`;
 }
 
 function buildSummaryPrompt(proj, tasks) {
@@ -827,35 +875,89 @@ ${pendingLines}
 Completed tasks (${completed.length}):
 ${completedLines}
 
-Generate a project summary with exactly these sections (use ## headers):
-## Pending Tasks & Due Dates
-List pending tasks grouped by week or urgency.
+Generate a project summary using EXACTLY this notation system (no markdown ## headers, no bold):
 
-## Completed Tasks
-Brief summary of what has been accomplished.
+Topic lines end with a colon. Sub-topics are indented with a tab. Notes use "- text". Tasks use "- [ ] text". Inline status annotations use [wip] [done] [blocked]. Wrap urgent/high-priority items with ==like this==. Use [[note name]] for referenced links or documents.
 
-## References & Links
-Extract any URLs, SharePoint links, file paths, or tools mentioned anywhere above. If none, write "(none found)".
+Output structure:
+Pending Tasks:
+\t<group by week or urgency as sub-topics>:
+\t\t- [ ] <task> [<priority>] — use ==text== for high priority items
 
-## Risks
-Identify risks, blockers, or concerns mentioned or implied. If none, write "(none identified)".
+Completed:
+\t- [done] <task summary>
 
-Keep each section concise. Use markdown bullet points.`;
+References & Links:
+\t- [[<link or resource name>]] for each URL, SharePoint, file path, or tool mentioned (skip if none)
+
+Risks:
+\t- [ ] ==<risk>== [blocked] for blockers, or - <risk> for general risks (skip if none)
+
+Keep each section concise.`;
 }
 
 function renderMarkdownSimple(text) {
-  return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/^## (.+)$/gm, '<h4 class="md-h2">$1</h4>')
-    .replace(/^### (.+)$/gm, '<strong class="md-h3">$1</strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>[\s\S]*?<\/li>)(\n<li>|$)/g, (_, li) => li)
-    .replace(/((<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
-    .replace(/\n\n/g, '<br>')
-    .replace(/^(?!<[hul]|<br)(.+)$/gm, '<p>$1</p>');
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // inline transforms applied to escaped text
+  function inlineFormat(s) {
+    return s
+      // ==highlight==
+      .replace(/==(.+?)==/g, '<mark class="ms-highlight">$1</mark>')
+      // [annotation]
+      .replace(/\[([^\]]+)\]/g, '<span class="ms-annotation">[$1]</span>')
+      // [[wikilink]]
+      .replace(/\[\[([^\]]+)\]\]/g, '<span class="ms-wikilink">[[$1]]</span>')
+      // URLs
+      .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }
+
+  const lines = text.split('\n');
+  let html = '';
+
+  for (const raw of lines) {
+    const line = raw.replace(/\t/g, '  '); // normalise tabs for indent counting
+    const indent = raw.match(/^(\t| {2,})*/)?.[0].replace(/ {2}/g, '\t').replace(/\t/g, '\t').split('\t').length - 1 || 0;
+    const trimmed = raw.trimStart();
+
+    if (!trimmed) { html += '<div class="ms-spacer"></div>'; continue; }
+
+    const indentPx = indent * 14;
+    const style = indentPx ? ` style="margin-left:${indentPx}px"` : '';
+
+    // Field line: "Key: value" (not a top-level topic, has content after colon)
+    const fieldMatch = trimmed.match(/^([A-Za-z][A-Za-z ]+):\s+(.+)$/);
+    if (fieldMatch && indent > 0) {
+      html += `<div class="ms-field"${style}><span class="ms-field-key">${esc(fieldMatch[1])}:</span> ${inlineFormat(esc(fieldMatch[2]))}</div>`;
+      continue;
+    }
+
+    // Topic line: ends with ":" (nothing after colon)
+    if (/^[^\-\s].+:\s*$/.test(trimmed)) {
+      const cls = indent === 0 ? 'ms-topic' : 'ms-subtopic';
+      html += `<div class="${cls}"${style}>${inlineFormat(esc(trimmed))}</div>`;
+      continue;
+    }
+
+    // Task: "- [ ] ..."
+    const taskMatch = trimmed.match(/^-\s+\[ \]\s+(.*)/);
+    if (taskMatch) {
+      html += `<div class="ms-task"${style}><span class="ms-checkbox">☐</span> ${inlineFormat(esc(taskMatch[1]))}</div>`;
+      continue;
+    }
+
+    // Note: "- ..."
+    const noteMatch = trimmed.match(/^-\s+(.*)/);
+    if (noteMatch) {
+      html += `<div class="ms-note"${style}><span class="ms-dash">–</span> ${inlineFormat(esc(noteMatch[1]))}</div>`;
+      continue;
+    }
+
+    // Fallback paragraph
+    html += `<div class="ms-para"${style}>${inlineFormat(esc(trimmed))}</div>`;
+  }
+
+  return html;
 }
 
 // ===== Archive View =====
@@ -1993,40 +2095,30 @@ function renderWeekPanel() {
 
   const weekKey = `${y}-W${w}`;
   const notes = Store.weekNotes();
-  document.getElementById('weekNotesTextarea').value = notes[weekKey] || '';
+  document.getElementById('weekNotesTextarea').value   = notes[weekKey] || '';
+  document.getElementById('standupNotesTextarea').value = notes[`${weekKey}-standup`] || '';
 
   // Reset to Notes tab each time a new week is selected
   document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t.dataset.wntab === 'notes'));
   document.getElementById('weekNotesTextarea').classList.remove('hidden');
+  document.getElementById('standupNotesTextarea').classList.add('hidden');
   document.getElementById('weekSummaryPanel').classList.add('hidden');
   document.getElementById('saveNotesBtn').classList.remove('hidden');
 
-  // Week notes tabs
-  document.querySelectorAll('.week-notes-tab').forEach(tab => {
-    tab.onclick = null; // reset before re-binding
-    tab.addEventListener('click', () => {
-      const isSummary = tab.dataset.wntab === 'summary';
-      document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
-      document.getElementById('weekNotesTextarea').classList.toggle('hidden', isSummary);
-      document.getElementById('weekSummaryPanel').classList.toggle('hidden', !isSummary);
-      document.getElementById('saveNotesBtn').classList.toggle('hidden', isSummary);
-      if (isSummary) {
-        const existing = Store.weekNotes()[`${weekKey}-summary`];
-        if (existing) showWeekSummary(existing);
-      }
-    });
-  });
-
-  // Generate button
-  document.getElementById('weekGenerateBtn').onclick = async () => {
+  // Shared generate function
+  async function generateWeekSummary() {
     const btn = document.getElementById('weekGenerateBtn');
     const out = document.getElementById('weekSummaryOutput');
     btn.disabled = true; btn.textContent = '✨ Generating…';
     out.classList.add('hidden');
     try {
-      const weekNoteText = Store.weekNotes()[weekKey] || '';
-      const weekTasks = Store.tasks().filter(t => t.week === w && t.year === y && !t.archived);
-      const prompt = buildWeekSummaryPrompt(w, y, start, end, weekNoteText, weekTasks);
+      const weekNoteText = Store.weekNotes()[`${weekKey}-standup`] || Store.weekNotes()[weekKey] || '';
+      const allTasks = Store.tasks().filter(t => !t.archived);
+      const startedTasks = allTasks.filter(t =>
+        t.week === w && t.year === y && (t.execStatus === 'wip' || t.status === 'next' || t.status === 'waiting')
+      );
+      const weekTasks = allTasks.filter(t => t.week === w && t.year === y);
+      const prompt = buildWeekSummaryPrompt(w, y, start, end, weekNoteText, startedTasks, weekTasks, Store.projects());
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2045,7 +2137,30 @@ function renderWeekPanel() {
     } finally {
       btn.disabled = false; btn.textContent = '↻ Regenerate';
     }
-  };
+  }
+
+  // Week notes tabs
+  document.querySelectorAll('.week-notes-tab').forEach(tab => {
+    tab.onclick = null;
+    tab.addEventListener('click', () => {
+      const wntab = tab.dataset.wntab;
+      document.querySelectorAll('.week-notes-tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.getElementById('weekNotesTextarea').classList.toggle('hidden',   wntab !== 'notes');
+      document.getElementById('standupNotesTextarea').classList.toggle('hidden', wntab !== 'standup');
+      document.getElementById('weekSummaryPanel').classList.toggle('hidden',    wntab !== 'summary');
+      document.getElementById('saveNotesBtn').classList.toggle('hidden',        wntab === 'summary');
+      if (wntab === 'summary') {
+        const existing = Store.weekNotes()[`${weekKey}-summary`];
+        if (existing) {
+          showWeekSummary(existing);
+        } else {
+          generateWeekSummary();
+        }
+      }
+    });
+  });
+
+  document.getElementById('weekGenerateBtn').onclick = generateWeekSummary;
 
   // Sync toggle button state
   const mode = state.weekViewMode;
@@ -2066,11 +2181,24 @@ function renderWeekPanel() {
   }
 }
 
+function copySummaryText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = orig; }, 1800);
+  });
+}
+
 function showWeekSummary(text) {
   const out = document.getElementById('weekSummaryOutput');
   out.innerHTML = renderMarkdownSimple(text);
   out.classList.remove('hidden');
   document.getElementById('weekGenerateBtn').textContent = '↻ Regenerate';
+  const copyBtn = document.getElementById('weekCopyBtn');
+  if (copyBtn) {
+    copyBtn.classList.remove('hidden');
+    copyBtn.onclick = () => copySummaryText(text, copyBtn);
+  }
 }
 
 function renderWeekTasks() {
@@ -2710,6 +2838,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskContext').value = task.context || '';
     document.getElementById('fTaskNotes').value = task.notes || '';
     document.getElementById('fTaskTimeSpent').value = formatTimeSpent(task.timeSpent) || '—';
+    document.getElementById('fTaskPoints').value = task.storyPoints || '';
   } else {
     titleEl.textContent = 'Add Task';
     deleteBtn.classList.add('hidden');
@@ -2729,8 +2858,21 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskContext').value = '';
     document.getElementById('fTaskNotes').value = '';
     document.getElementById('fTaskTimeSpent').value = '—';
+    document.getElementById('fTaskPoints').value = '';
     document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   }
+
+  // More fields toggle — auto-expand for edits, collapse for new tasks
+  const moreBtn = document.getElementById('taskMoreToggle');
+  const moreFields = document.getElementById('taskMoreFields');
+  const expand = !!taskId;
+  moreFields.classList.toggle('hidden', !expand);
+  moreBtn.textContent = expand ? '▾ Less fields' : '▸ More fields';
+  moreBtn.onclick = () => {
+    const open = !moreFields.classList.contains('hidden');
+    moreFields.classList.toggle('hidden', open);
+    moreBtn.textContent = open ? '▸ More fields' : '▾ Less fields';
+  };
 
   function updateRemain() {
     const effort = document.getElementById('fTaskEffort').value;
@@ -2746,7 +2888,7 @@ function openTaskModal(taskId, defaults = null) {
     if (!taskId) document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   };
 
-  // Activity log — show when editing, remove when creating
+  // Activity log — appended inside more-fields when editing
   const existingLog = document.getElementById('taskActivityLog');
   if (existingLog) existingLog.remove();
   if (taskId) {
@@ -2765,7 +2907,7 @@ function openTaskModal(taskId, defaults = null) {
           </div>`;
         }).join('')
       : `<div class="activity-log-empty">No week changes recorded yet.</div>`);
-    document.querySelector('#taskModalOverlay .modal-body').appendChild(section);
+    document.getElementById('taskMoreFields').appendChild(section);
   }
 
   modal.classList.remove('hidden');
@@ -2801,6 +2943,7 @@ function saveTask() {
     delegated: document.getElementById('fTaskDelegated').value.trim(),
     context: document.getElementById('fTaskContext').value.trim(),
     notes: document.getElementById('fTaskNotes').value.trim(),
+    storyPoints: parseInt(document.getElementById('fTaskPoints').value) || null,
   };
 
   if (id) {
@@ -2946,7 +3089,9 @@ function generateObsidianNote(week, year) {
   const { start, end } = weekRange(week, year);
   const tasks = Store.tasks().filter(t => t.week === week && t.year === year);
   const projects = Store.projects();
-  const notes = Store.weekNotes()[`${year}-W${week}`] || '';
+  const allWeekNotes = Store.weekNotes();
+  const notes        = allWeekNotes[`${year}-W${week}`] || '';
+  const standupNotes = allWeekNotes[`${year}-W${week}-standup`] || '';
 
   const getProject = id => projects.find(p => p.id === id);
 
@@ -2978,6 +3123,9 @@ date-range: "${formatDate(start)} → ${formatDate(end)}"
   if (notes) {
     md += `## Notes\n\n${notes}\n\n`;
   }
+  if (standupNotes) {
+    md += `## Standup Notes\n\n${standupNotes}\n\n`;
+  }
 
   if (personal.length > 0) {
     md += `## Personal Tasks\n\n${personal.map(taskLine).join('\n')}\n\n`;
@@ -2992,13 +3140,12 @@ date-range: "${formatDate(start)} → ${formatDate(end)}"
   }
 
   // Day notes for days within this week that have notes
-  const allNotes = Store.weekNotes();
   const { start: ws } = weekRange(week, year);
   const dayNoteEntries = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(ws); d.setDate(ws.getDate() + i);
     const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    if (allNotes[dk]) dayNoteEntries.push({ dk, note: allNotes[dk], d });
+    if (allWeekNotes[dk]) dayNoteEntries.push({ dk, note: allWeekNotes[dk], d });
   }
   if (dayNoteEntries.length > 0) {
     md += `## Day Notes\n\n`;
@@ -3128,11 +3275,14 @@ function closeObsidianModal() {
 function saveWeekNotes() {
   const { selectedWeek: w, selectedWeekYear: y } = state;
   const notes = Store.weekNotes();
-  const ta = document.getElementById('weekNotesTextarea');
-  if (!ta) return;
-  const val = ta.value;
   const key = `${y}-W${w}`;
-  if (val.trim()) notes[key] = val; else delete notes[key];
+
+  const ta = document.getElementById('weekNotesTextarea');
+  if (ta) { const v = ta.value; if (v.trim()) notes[key] = v; else delete notes[key]; }
+
+  const sta = document.getElementById('standupNotesTextarea');
+  if (sta) { const v = sta.value; if (v.trim()) notes[`${key}-standup`] = v; else delete notes[`${key}-standup`]; }
+
   Store.saveWeekNotes(notes);
   const btn = document.getElementById('saveNotesBtn');
   if (btn) { btn.textContent = 'Saved ✓'; setTimeout(() => btn.textContent = 'Save', 1500); }
