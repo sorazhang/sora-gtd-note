@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GTD Note System</title>
-  <link rel="stylesheet" href="styles.css?v=27">
+  <link rel="stylesheet" href="styles.css?v=28">
 </head>
 <body>
   <div class="app-container">
@@ -39,6 +39,10 @@
             <button class="nav-item" data-view="today">
               <span class="nav-icon">🎯</span>
               <span class="nav-label">Today's Focus</span>
+            </button>
+            <button class="nav-item" data-view="workspace">
+              <span class="nav-icon">🗂</span>
+              <span class="nav-label">Workspace</span>
             </button>
             <button class="nav-item active" data-view="inbox">
               <span class="nav-icon">⬇</span>
@@ -101,6 +105,9 @@
           </div>
           <button class="btn-generate" id="generateNoteBtn">📝 Obsidian</button>
         </div>
+
+        <!-- Workspace View (task list + note) -->
+        <div id="workspaceView" class="hidden"></div>
 
         <!-- Task Detail Panel -->
         <div id="taskDetailView" class="hidden"></div>
@@ -419,6 +426,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=33"></script>
+  <script src="app.js?v=34"></script>
 </body>
 </html>
