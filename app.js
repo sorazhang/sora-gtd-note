@@ -2838,6 +2838,7 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskContext').value = task.context || '';
     document.getElementById('fTaskNotes').value = task.notes || '';
     document.getElementById('fTaskTimeSpent').value = formatTimeSpent(task.timeSpent) || '—';
+    document.getElementById('fTaskPoints').value = task.storyPoints || '';
   } else {
     titleEl.textContent = 'Add Task';
     deleteBtn.classList.add('hidden');
@@ -2857,8 +2858,21 @@ function openTaskModal(taskId, defaults = null) {
     document.getElementById('fTaskContext').value = '';
     document.getElementById('fTaskNotes').value = '';
     document.getElementById('fTaskTimeSpent').value = '—';
+    document.getElementById('fTaskPoints').value = '';
     document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   }
+
+  // More fields toggle — auto-expand for edits, collapse for new tasks
+  const moreBtn = document.getElementById('taskMoreToggle');
+  const moreFields = document.getElementById('taskMoreFields');
+  const expand = !!taskId;
+  moreFields.classList.toggle('hidden', !expand);
+  moreBtn.textContent = expand ? '▾ Less fields' : '▸ More fields';
+  moreBtn.onclick = () => {
+    const open = !moreFields.classList.contains('hidden');
+    moreFields.classList.toggle('hidden', open);
+    moreBtn.textContent = open ? '▸ More fields' : '▾ Less fields';
+  };
 
   function updateRemain() {
     const effort = document.getElementById('fTaskEffort').value;
@@ -2874,7 +2888,7 @@ function openTaskModal(taskId, defaults = null) {
     if (!taskId) document.getElementById('fTaskId').value = generateTaskId(projSelect.value);
   };
 
-  // Activity log — show when editing, remove when creating
+  // Activity log — appended inside more-fields when editing
   const existingLog = document.getElementById('taskActivityLog');
   if (existingLog) existingLog.remove();
   if (taskId) {
@@ -2893,7 +2907,7 @@ function openTaskModal(taskId, defaults = null) {
           </div>`;
         }).join('')
       : `<div class="activity-log-empty">No week changes recorded yet.</div>`);
-    document.querySelector('#taskModalOverlay .modal-body').appendChild(section);
+    document.getElementById('taskMoreFields').appendChild(section);
   }
 
   modal.classList.remove('hidden');
@@ -2929,6 +2943,7 @@ function saveTask() {
     delegated: document.getElementById('fTaskDelegated').value.trim(),
     context: document.getElementById('fTaskContext').value.trim(),
     notes: document.getElementById('fTaskNotes').value.trim(),
+    storyPoints: parseInt(document.getElementById('fTaskPoints').value) || null,
   };
 
   if (id) {

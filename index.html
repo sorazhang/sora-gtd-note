@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GTD Note System</title>
-  <link rel="stylesheet" href="styles.css?v=26">
+  <link rel="stylesheet" href="styles.css?v=27">
 </head>
 <body>
   <div class="app-container">
@@ -176,128 +176,128 @@
 
   <!-- Add / Edit Task Modal -->
   <div class="modal-overlay hidden" id="taskModalOverlay">
-    <div class="modal">
-      <div class="modal-header">
+    <div class="modal modal-task">
+      <div class="modal-header task-modal-header">
         <h3 id="taskModalTitle">Add Task</h3>
         <button class="modal-close-btn" id="taskModalClose">✕</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body task-modal-body">
         <input type="hidden" id="editTaskId">
-        <div class="form-group">
-          <label class="form-label">Title *</label>
-          <input type="text" id="fTaskTitle" class="form-input" placeholder="What needs to be done?">
+
+        <!-- Title — always visible, large -->
+        <textarea id="fTaskTitle" class="task-title-input" placeholder="What needs to be done?" rows="2"></textarea>
+
+        <!-- Notes — always visible -->
+        <textarea id="fTaskNotes" class="task-notes-input" placeholder="Notes, links, references…"></textarea>
+
+        <!-- Quick chips row -->
+        <div class="task-chips-row">
+          <select id="fTaskStatus" class="task-chip" title="GTD Status">
+            <option value="inbox">📥 Inbox</option>
+            <option value="next">⚡ Next</option>
+            <option value="waiting">⏳ Waiting</option>
+            <option value="someday">💭 Someday</option>
+          </select>
+          <select id="fTaskPriority" class="task-chip" title="Priority">
+            <option value="medium">🟡 Med</option>
+            <option value="high">🔴 High</option>
+            <option value="low">⚪ Low</option>
+          </select>
+          <select id="fTaskProject" class="task-chip task-chip-wide" title="Project">
+            <option value="">No Project</option>
+          </select>
+          <select id="fTaskExecStatus" class="task-chip" title="Exec Status">
+            <option value="">— Status —</option>
+            <option value="todo">Todo</option>
+            <option value="wip">WIP</option>
+            <option value="done">Done</option>
+          </select>
+          <select id="fTaskPoints" class="task-chip" title="Story Points">
+            <option value="">— pts —</option>
+            <option value="1">1 pt</option>
+            <option value="2">2 pt</option>
+            <option value="3">3 pt</option>
+            <option value="5">5 pt</option>
+            <option value="8">8 pt</option>
+            <option value="13">13 pt</option>
+          </select>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Task ID</label>
-            <input type="text" id="fTaskId" class="form-input task-id-input" readonly placeholder="Auto-generated">
+
+        <!-- More fields expander -->
+        <button class="task-more-toggle" id="taskMoreToggle">▸ More fields</button>
+        <div class="task-more-fields hidden" id="taskMoreFields">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Week #</label>
+              <input type="number" id="fTaskWeek" class="form-input" min="1" max="53" placeholder="e.g. 20">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Year</label>
+              <input type="number" id="fTaskYear" class="form-input" placeholder="e.g. 2026">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select id="fTaskCategory" class="form-select">
+                <option value="personal">Personal</option>
+                <option value="work">Work</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Effort</label>
+              <select id="fTaskEffort" class="form-select">
+                <option value="TBD">TBD</option>
+                <option value="10min">10 min</option>
+                <option value="20min">20 min</option>
+                <option value="60min">60 min</option>
+                <option value="90min">90 min</option>
+                <option value="120min">120 min</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Progress</label>
+              <select id="fTaskProgress" class="form-select">
+                <option value="0">0%</option>
+                <option value="10">10%</option>
+                <option value="25">25%</option>
+                <option value="50">50%</option>
+                <option value="75">75%</option>
+                <option value="90">90%</option>
+                <option value="100">100% — Done</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Remain Effort</label>
+              <input type="text" id="fTaskRemain" class="form-input task-id-input" readonly placeholder="Auto-calculated">
+            </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Effort</label>
-            <select id="fTaskEffort" class="form-select">
-              <option value="TBD">TBD</option>
-              <option value="10min">10 min</option>
-              <option value="20min">20 min</option>
-              <option value="60min">60 min</option>
-              <option value="90min">90 min</option>
-              <option value="120min">120 min</option>
-            </select>
+            <label class="form-label">Specific Day</label>
+            <input type="date" id="fTaskDay" class="form-input">
           </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Progress</label>
-            <select id="fTaskProgress" class="form-select">
-              <option value="0">0%</option>
-              <option value="10">10%</option>
-              <option value="25">25%</option>
-              <option value="50">50%</option>
-              <option value="75">75%</option>
-              <option value="90">90%</option>
-              <option value="100">100% — Done</option>
-            </select>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Delegated To</label>
+              <input type="text" id="fTaskDelegated" class="form-input" placeholder="Name or team…">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Context</label>
+              <input type="text" id="fTaskContext" class="form-input" placeholder="@home, @computer…">
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Remain Effort</label>
-            <input type="text" id="fTaskRemain" class="form-input task-id-input" readonly placeholder="Auto-calculated">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Task ID</label>
+              <input type="text" id="fTaskId" class="form-input task-id-input" readonly placeholder="Auto-generated">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Time Spent</label>
+              <input type="text" id="fTaskTimeSpent" class="form-input task-id-input" readonly placeholder="—">
+            </div>
           </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Time Spent</label>
-            <input type="text" id="fTaskTimeSpent" class="form-input task-id-input" readonly placeholder="—">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Category</label>
-            <select id="fTaskCategory" class="form-select">
-              <option value="personal">Personal</option>
-              <option value="work">Work</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Priority</label>
-            <select id="fTaskPriority" class="form-select">
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">GTD Status</label>
-            <select id="fTaskStatus" class="form-select">
-              <option value="inbox">Inbox</option>
-              <option value="next">Next Action</option>
-              <option value="waiting">Waiting For</option>
-              <option value="someday">Someday</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Status</label>
-            <select id="fTaskExecStatus" class="form-select">
-              <option value="">— No status —</option>
-              <option value="todo">Todo</option>
-              <option value="wip">WIP</option>
-              <option value="done">Done</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Project</label>
-            <select id="fTaskProject" class="form-select">
-              <option value="">No Project</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Week #</label>
-            <input type="number" id="fTaskWeek" class="form-input" min="1" max="53" placeholder="e.g. 17">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Year</label>
-            <input type="number" id="fTaskYear" class="form-input" placeholder="e.g. 2026">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Specific Day <span style="font-weight:400;color:var(--text-3)">(optional)</span></label>
-          <input type="date" id="fTaskDay" class="form-input">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Delegated To <span style="font-weight:400;color:var(--text-3)">(optional)</span></label>
-          <input type="text" id="fTaskDelegated" class="form-input" placeholder="Name or team…">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Context</label>
-          <input type="text" id="fTaskContext" class="form-input" placeholder="@home, @office, @computer…">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Notes</label>
-          <textarea id="fTaskNotes" class="form-textarea" placeholder="Details, links, references…"></textarea>
         </div>
       </div>
       <div class="modal-footer">
@@ -343,6 +343,33 @@
               <option value="active">Active</option>
               <option value="on-hold">On Hold</option>
               <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Roadmap Quarter</label>
+            <select id="fProjectQuarter" class="form-select">
+              <option value="">— Backlog —</option>
+              <option value="2025-Q1">2025 Q1</option>
+              <option value="2025-Q2">2025 Q2</option>
+              <option value="2025-Q3">2025 Q3</option>
+              <option value="2025-Q4">2025 Q4</option>
+              <option value="2026-Q1">2026 Q1</option>
+              <option value="2026-Q2">2026 Q2</option>
+              <option value="2026-Q3">2026 Q3</option>
+              <option value="2026-Q4">2026 Q4</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">T-Shirt Size</label>
+            <select id="fProjectSize" class="form-select">
+              <option value="">— TBD —</option>
+              <option value="XS">XS</option>
+              <option value="S">S</option>
+              <option value="M">M</option>
+              <option value="L">L</option>
+              <option value="XL">XL</option>
             </select>
           </div>
         </div>
@@ -392,6 +419,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=33"></script>
 </body>
 </html>
