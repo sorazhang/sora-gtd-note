@@ -1600,9 +1600,9 @@ body {
   gap: 0;
 }
 .ws-tasks-col {
-  width: 40%;
-  min-width: 220px;
-  max-width: 380px;
+  width: 45%;
+  min-width: 260px;
+  max-width: 520px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
