@@ -1,5 +1,7 @@
 // ===== Utilities =====
 
+const APP_VERSION = 'v1.4.0';
+
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
@@ -3592,6 +3594,7 @@ function init() {
   });
 
   renderAll();
+  document.getElementById('appVersion').textContent = APP_VERSION;
 }
 
 init();
